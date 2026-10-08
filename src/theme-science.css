@@ -1,0 +1,196 @@
+/* 青绿科学主题。原紫红配色保留在 style.css / timetable.css，移除 html 的
+   theme-science 类即可恢复；页面右上角头像菜单也可直接切换。 */
+:root.theme-science {
+  --el-color-primary: #10b981;
+  --el-color-primary-light-3: #53cfa2;
+  --el-color-primary-light-5: #88ddbd;
+  --el-color-primary-light-7: #b8ebd6;
+  --el-color-primary-light-9: #ecfdf5;
+  --el-color-primary-dark-2: #059669;
+  --el-bg-color-page: #f7fbf9;
+  --science-chart-primary: #10b981;
+  --science-chart-comparison: #3b82f6;
+  --science-chart-grid: #e5e7eb;
+  --science-chart-highlight: #fbbf24;
+}
+
+.theme-science .app-shell { background: #f7fbf9; }
+.theme-science .workspace {
+  background-color: #f7fbf9;
+  background-image:
+    linear-gradient(rgba(15, 118, 110, .018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 118, 110, .018) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* 左侧导航 */
+.theme-science .sidebar {
+  background: #0f766e;
+  box-shadow: 8px 0 24px rgba(6, 78, 59, .08);
+}
+.theme-science .brand { border-bottom-color: rgba(255, 255, 255, .14); }
+.theme-science .brand-mark {
+  border-color: rgba(255, 255, 255, .48);
+  background: rgba(255, 255, 255, .12);
+}
+.theme-science .brand-copy span,
+.theme-science .sidebar-footer-card span,
+.theme-science .collapse-btn { color: rgba(255, 255, 255, .7); }
+.theme-science .nav-group-title { color: rgba(255, 255, 255, .4); }
+.theme-science .nav-link { color: #cbd5e1; }
+.theme-science .nav-link:hover { background: #0d9488; color: #fff; }
+.theme-science .nav-link.selected {
+  background: #10b981;
+  color: #fff;
+  box-shadow: inset 3px 0 #5eead4;
+}
+.theme-science .sidebar-footer { border-top-color: rgba(255, 255, 255, .14); }
+.theme-science .sidebar-footer-card {
+  background: rgba(255, 255, 255, .09);
+  border-color: rgba(255, 255, 255, .13);
+}
+.theme-science .sidebar-footer-card > .el-icon { color: #99f6e4; }
+.theme-science .collapse-btn:hover { color: #fff; }
+
+/* 页眉 */
+.theme-science .topbar { background: #fff; border-bottom-color: #e5e7eb; }
+.theme-science .page-name { color: #064e3b; font-weight: 600; }
+.theme-science .top-date { color: #6b7280; }
+.theme-science .search-box {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #9ca3af;
+}
+.theme-science .search-box:focus-within { border-color: #10b981; background: #fff; }
+.theme-science .search-box input { color: #374151; }
+.theme-science .search-box input::placeholder { color: #9ca3af; }
+.theme-science .search-box kbd { color: #9ca3af; }
+.theme-science .icon-button { color: #6b7280; }
+.theme-science .icon-button:hover { background: #ecfdf5; color: #047857; }
+.theme-science .notification-btn i { background: #10b981; }
+.theme-science .task-status {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+.theme-science .task-pulse {
+  background: #14b8a6;
+  box-shadow: 0 0 0 3px #ccfbf1;
+  animation: science-pulse 2s infinite;
+}
+@keyframes science-pulse {
+  50% { box-shadow: 0 0 0 7px rgba(20, 184, 166, .12); }
+}
+.theme-science .avatar {
+  background: linear-gradient(135deg, #0f766e, #10b981);
+  border: 2px solid #10b981;
+  box-shadow: 0 2px 7px rgba(16, 185, 129, .22);
+}
+.theme-science .user-trigger { color: #374151; }
+
+/* 横幅与内容卡片 */
+.theme-science .welcome-banner {
+  background: linear-gradient(135deg, #0f766e 0%, #10b981 50%, #14b8a6 100%);
+  box-shadow: 0 9px 24px rgba(15, 118, 110, .15);
+  border-radius: 8px;
+}
+.theme-science .welcome-banner::before {
+  background: radial-gradient(circle at 78% 140%, rgba(255, 255, 255, .14), transparent 42%);
+}
+.theme-science .welcome-eyebrow,
+.theme-science .welcome-banner p { color: #d1fae5; }
+.theme-science .welcome-banner h1,
+.theme-science .welcome-banner p strong { color: #fff; }
+.theme-science .eyebrow-dot { background: #fbbf24; }
+.theme-science .banner-art { opacity: .34; }
+.theme-science .ai-tip {
+  display: inline-block;
+  margin: 0 3px 0 1px;
+  padding: 1px 8px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .2);
+  color: #fff !important;
+  font-weight: 700;
+}
+.theme-science .banner-star { color: #fef3c7 !important; }
+.theme-science .surface-card {
+  background: #fff;
+  border-color: #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(6, 78, 59, .035);
+}
+.theme-science .overline { color: #0d9488; }
+.theme-science .section-heading h2,
+.theme-science .card-header h2 { color: #064e3b; }
+.theme-science .section-caption { color: #9ca3af; }
+
+/* 快捷入口 */
+.theme-science .featured-entry {
+  background: #fff;
+  border-color: #e5e7eb;
+  border-radius: 8px;
+}
+.theme-science .featured-entry:hover {
+  border-color: #10b981;
+  box-shadow: 0 8px 22px rgba(16, 185, 129, .11);
+}
+.theme-science .featured-icon.gold { background: #ecfdf5; color: #10b981; }
+.theme-science .featured-icon.rose { background: #eff6ff; color: #3b82f6; }
+.theme-science .featured-icon.violet { background: #f5f3ff; color: #8b5cf6; }
+.theme-science .featured-icon.pink { background: #fef3c7; color: #f59e0b; }
+.theme-science .featured-entry strong { color: #374151; }
+.theme-science .featured-entry small,
+.theme-science .entry-arrow { color: #9ca3af; }
+.theme-science .quick-divider { background: #f3f4f6; }
+.theme-science .secondary-entry { color: #4b5563; }
+.theme-science .secondary-entry:hover { background: #f0fdf4; color: #047857; }
+.theme-science .secondary-icon { background: #f3f4f6; color: #6b7280; }
+.theme-science .secondary-entry:hover .secondary-icon { background: #ecfdf5; color: #10b981; }
+
+/* 课程表整体沿用原紫红配色；青绿主题仅应用于其他模块。 */
+.theme-science .course-card {
+  border-color: #eee8e9;
+  box-shadow: 0 4px 22px rgba(71, 49, 61, .035);
+}
+.theme-science .course-card .card-header h2 { color: #302b2f; }
+.theme-science .course-card .overline { color: #b38b9a; }
+.theme-science .heading-icon.peach { background: #ecfdf5; color: #10b981; }
+
+/* 待办 */
+.theme-science .pending-pill { background: #ecfdf5; color: #059669; }
+.theme-science .date-switcher { background: #f9fafb; }
+.theme-science .date-switcher button { color: #9ca3af; }
+.theme-science .date-switcher button:hover { color: #10b981; }
+.theme-science .date-switcher strong { color: #374151; }
+.theme-science .date-switcher > div .el-icon { color: #10b981; }
+.theme-science .today-marker { background: #d1fae5; color: #047857; }
+.theme-science .todo-stats { color: #6b7280; }
+.theme-science .todo-stats strong { color: #10b981; font-weight: 800; }
+.theme-science .todo-row { border-bottom-color: #f3f4f6; }
+.theme-science .todo-text { color: #374151; }
+.theme-science .todo-row.done .todo-text { color: #9ca3af; }
+.theme-science .todo-more { color: #9ca3af; }
+.theme-science .todo-more:hover { color: #059669; }
+.theme-science .todo-form .el-input__wrapper { box-shadow: 0 0 0 1px #e5e7eb inset; }
+.theme-science .todo-form .el-input__wrapper.is-focus { box-shadow: 0 0 0 1px #10b981 inset; }
+.theme-science .todo-form .el-input__inner::placeholder { color: #9ca3af; }
+.theme-science .priority-picker { color: #6b7280; }
+.theme-science .todo-form-bottom .el-button--primary { background: #10b981; border-color: #10b981; color: #fff; }
+.theme-science .todo-form-bottom .el-button--primary:hover { background: #059669; border-color: #059669; }
+.theme-science .todo-actions { border-top-color: #f3f4f6; }
+.theme-science .todo-actions button { color: #6b7280; }
+.theme-science .todo-actions button:hover:not(:disabled) { color: #059669; }
+.theme-science .todo-empty > span { background: #f9fafb; color: #d1d5db; }
+.theme-science .todo-empty strong,
+.theme-science .todo-empty p { color: #9ca3af; }
+.theme-science .bottom-note { color: #9ca3af; }
+.theme-science .bottom-note span,
+.theme-science .bottom-note em { color: #0d9488; }
+.theme-science .task-mini-icon { background: #ecfdf5; color: #10b981; }
+
+.priority-option { display: inline-flex; align-items: center; gap: 7px; }
+.priority-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.priority-dot.normal { background: #9ca3af; }
+.priority-dot.high { background: #ef4444; }
+.priority-dot.low { background: #10b981; }

@@ -1,0 +1,189 @@
+/* 首页周课表：保留样例图的时间网格与分段底色。 */
+.content-grid {
+  grid-template-columns: minmax(660px, 1.7fr) minmax(310px, 1fr);
+  align-items: stretch;
+}
+
+.course-card {
+  min-width: 0;
+}
+
+.todo-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.todo-card .todo-list,
+.todo-card .todo-empty {
+  flex: 1;
+  max-height: none;
+}
+
+.todo-card .todo-form {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.schedule-week-label {
+  color: #a28f98;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.timetable-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid #dcd3d7;
+  border-radius: 9px;
+  scrollbar-color: #cfb4c0 #faf7f8;
+  scrollbar-width: thin;
+}
+
+.timetable-inner {
+  display: grid;
+  grid-template-columns: 146px repeat(5, minmax(0, 1fr));
+  width: 100%;
+  min-width: 620px;
+}
+
+.timetable-inner .timetable {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.today-column-outline {
+  grid-row: 1;
+  align-self: stretch;
+  z-index: 1;
+  border: 3px solid #99566f;
+  background: rgba(165, 111, 135, .035);
+  box-shadow: 0 0 0 2px rgba(165, 111, 135, .12);
+  pointer-events: none;
+}
+
+.timetable {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  color: #51444b;
+}
+
+.timetable th,
+.timetable td {
+  height: 38px;
+  padding: 5px 4px;
+  border-right: 1px solid #dcd3d7;
+  border-bottom: 1px solid #dcd3d7;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.timetable tr > :last-child { border-right: 0; }
+.timetable tbody tr:last-child > * { border-bottom: 0; }
+.timetable thead th {
+  height: 38px;
+  background: #f7f3f5;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.timetable thead th:first-child { width: 146px; }
+.timetable thead th.today-column {
+  background: #f5e7ed;
+  color: #8c6175;
+}
+.day-today-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 0 1px 5px;
+  border-radius: 50%;
+  background: #bb7f99;
+}
+.timetable .clock-time {
+  width: 104px;
+  color: #6d6166;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.timetable .section-time {
+  width: 42px;
+  color: #766473;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.timetable .schedule-slot {
+  font-size: 10px;
+  font-weight: 600;
+}
+.timetable .schedule-slot.today-column {
+  box-shadow: none;
+}
+.timetable .research-slot {
+  background: #faebde;
+  color: #8b684f;
+  font-weight: 800;
+}
+.row-break > * { background: #e6f4f7; }
+.row-lunch > * { background: #eeeaf3; }
+.row-care > * { background: #eeeaf3; }
+.row-extended > * { background: #eef3e6; }
+.timetable .merged-event {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: #77677c;
+}
+.slot-label {
+  display: inline-block;
+  max-width: 100%;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.important-lesson {
+  padding: 4px 7px;
+  border: 1px solid #d9a5b6;
+  border-radius: 6px;
+  background: #fff3f6;
+  color: #a3607b;
+  font-weight: 800;
+}
+.timetable-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 2px 0;
+  color: #8e8088;
+  font-size: 10px;
+}
+.timetable-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+.legend-dot.key-lesson { background: #e8b7c6; }
+.legend-dot.today-day { background: #f1dfe7; border: 1px solid #d7afbf; }
+.timetable-legend .legend-note {
+  margin-left: auto;
+  color: #afa4a9;
+}
+
+@media (max-width: 1280px) {
+  .content-grid { grid-template-columns: minmax(0, 1fr); }
+  .timetable, .timetable-inner { min-width: 670px; }
+}
+@media (max-width: 650px) {
+  .schedule-week-label { display: none; }
+  .timetable, .timetable-inner { min-width: 650px; }
+  .timetable-legend .legend-note { margin-left: 0; width: 100%; }
+}
