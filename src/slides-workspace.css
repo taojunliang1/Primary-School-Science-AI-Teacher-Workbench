@@ -36,3 +36,12 @@
 .slides-page-actions{display:flex;flex-wrap:wrap;gap:6px;padding-top:14px;margin-top:14px;border-top:1px solid var(--prep-border)}.slides-page-actions .el-button+.el-button{margin-left:0}.slides-page-actions .el-button{font-size:10px;padding:7px 9px}
 @media(max-width:1180px){.slides-layout{grid-template-columns:1fr}.slides-preview-card{min-height:0}.slides-preview-empty{min-height:290px}}
 @media(max-width:650px){.slides-page{padding:15px}.slides-hero{min-height:190px;padding:22px}.slides-hero h1{font-size:23px}.slides-hero p{font-size:11px}.slides-hero-art{right:-90px;opacity:.35}.slides-form-card,.slides-preview-card{padding:18px 15px}.slides-notice{align-items:flex-start}.slides-template-grid{grid-template-columns:1fr}.slides-template{min-height:0;padding:11px 12px 9px}.slides-template em{margin-top:5px}.slides-form-actions .el-button{flex:1}.slides-form-actions .el-button.is-text{flex:0 0 100%}.slides-canvas{min-height:220px;padding:19px}.slides-page-actions .el-button{flex:1}}
+
+/* 双栏卡片等宽且共用同一行高。 */
+.slides-layout{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.slides-form-card,.slides-preview-card{height:100%}
+.theme-science .slides-page{--prep-primary:#10b981;--prep-strong:#064e3b;--prep-soft:#ecfdf5;--prep-border:#f3f4f6;--prep-text:#374151;--prep-muted:#6b7280}
+.theme-science .slides-preview-card{background:#f9fafb}
+.theme-science .slides-canvas{background:#fff}
+.theme-science .slides-canvas:before{top:0;bottom:0;right:auto;left:0;width:4px;height:auto;border-radius:9px 0 0 9px}
+@media(max-width:1180px){.slides-layout{grid-template-columns:1fr}}

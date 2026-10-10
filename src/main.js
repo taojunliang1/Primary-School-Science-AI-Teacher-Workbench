@@ -8,5 +8,7 @@ import './timetable.css'
 import './theme-science.css'
 import './slides-workspace.css'
 import './teaching-prep.css'
+import './library-workspace.css'
+import './prep-polish.css'
 
 createApp(App).use(createPinia()).use(ElementPlus).mount('#app')

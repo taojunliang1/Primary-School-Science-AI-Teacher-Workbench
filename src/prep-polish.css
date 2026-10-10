@@ -1,0 +1,146 @@
+/* 教学筹备页面的版式与配色补充。原紫红主题仍使用既有样式。 */
+html{scrollbar-gutter:stable}
+.slides-hero,.prep-hero{height:190px;min-height:190px}
+.prep-hero h1{font-size:28px;margin:10px 0 6px}
+.prep-hero .prep-kicker{
+  display:inline-flex;
+  align-items:center;
+  padding:5px 9px;
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:20px;
+  background:rgba(255,255,255,.13);
+  font-size:10px;
+  letter-spacing:.04em;
+}
+.library-hero-count{
+  display:inline-flex;
+  margin-top:13px;
+  padding:4px 9px;
+  border-radius:4px;
+  background:rgba(255,255,255,.17);
+  color:#fff;
+  font-size:10px;
+  font-weight:700;
+}
+.prep-inquiry .prep-notice{margin-top:16px}
+.library-toolbar{margin-top:16px}
+.inquiry-layout{align-items:stretch}
+.inquiry-layout .prep-editor-card,
+.inquiry-layout .prep-preview-card{height:100%}
+.inquiry-layout .prep-preview-card{
+  position:static;
+  max-height:none;
+  overflow:visible;
+  display:flex;
+  flex-direction:column;
+}
+.inquiry-layout .prep-preview-paper{flex:1}
+.inquiry-report-button{width:100%;margin-top:16px}
+
+.theme-science .prep-page{
+  --prep-accent:#10b981;
+  --prep-deep:#064e3b;
+  --prep-wash:#f9fafb;
+  --prep-line:#f3f4f6;
+  --prep-ink:#374151;
+  --prep-muted:#6b7280;
+}
+.theme-science .prep-inquiry .prep-hero{
+  background:linear-gradient(112deg,#155e75,#0284c7);
+  box-shadow:0 8px 24px rgba(2,132,199,.14);
+}
+.theme-science .slides-hero{
+  background:linear-gradient(112deg,#6c5188,#9b80ad);
+  box-shadow:0 8px 24px rgba(95,65,126,.14);
+}
+.theme-science .library-cases .prep-hero{
+  background:linear-gradient(112deg,#77435c,#ae718b);
+  box-shadow:0 8px 24px rgba(119,67,92,.14);
+}
+.theme-science .library-papers .prep-hero{
+  background:linear-gradient(112deg,#1e3a8a,#4f46e5);
+  box-shadow:0 8px 24px rgba(30,58,138,.14);
+}
+.theme-science .library-reflections .prep-hero{
+  background:linear-gradient(112deg,#586b3c,#8ba75b);
+  box-shadow:0 8px 24px rgba(88,107,60,.14);
+}
+.theme-science .slides-hero .prep-hero-mark{
+  background:#f6f0fa;
+  border-color:rgba(255,255,255,.5);
+  color:#765392;
+}
+.theme-science .prep-inquiry .prep-hero-mark{
+  background:#eff6ff;
+  border-color:rgba(191,219,254,.9);
+  color:#3b82f6;
+}
+.theme-science .prep-inquiry .prep-step,
+.theme-science .prep-inquiry .inquiry-active-number{
+  background:#eff6ff;
+  color:#3b82f6;
+}
+.theme-science .prep-inquiry .inquiry-step-track button.active{
+  border-color:#10b981;
+  box-shadow:inset 0 -3px #10b981;
+}
+.theme-science .prep-inquiry .inquiry-step-track button.active span{
+  background:#10b981;
+  color:#fff;
+}
+.theme-science .prep-inquiry .inquiry-step-track button.complete:not(.active){
+  border-color:#99f6e4;
+  color:#0f766e;
+}
+.theme-science .prep-inquiry .inquiry-step-track button.complete:not(.active) span{
+  background:#14b8a6;
+  color:#fff;
+}
+.theme-science .prep-inquiry .inquiry-active-step{
+  border-left:4px solid #3b82f6;
+  background:linear-gradient(140deg,#fff 75%,#eff6ff);
+}
+
+.theme-science .library-cases .prep-hero-mark{
+  background:#fceef3;
+  color:#a45171;
+}
+.theme-science .library-papers .prep-hero-mark{
+  background:#eef2ff;
+  color:#4f46e5;
+}
+.theme-science .library-reflections .prep-hero-mark{
+  background:#f4f8e9;
+  color:#718d43;
+}
+.theme-science .library-papers .paper-title>.el-icon{background:#eef2ff;color:#4f46e5}
+.theme-science .library-cases .case-card-number{color:#d9a7ba}
+.theme-science .library-papers .library-table-card .el-table__header th{background:#f8f7ff!important}
+.theme-science .library-reflections .journal-marker:after{border-color:#8ba75b}
+.theme-science .library-reflections .journal-date strong{color:#586b3c}
+.theme-science .library-drawer{
+  --prep-accent:#10b981;
+  --prep-deep:#064e3b;
+  --prep-wash:#f9fafb;
+  --prep-line:#f3f4f6;
+  --prep-ink:#374151;
+  --prep-muted:#6b7280;
+}
+.theme-science .library-drawer .library-reading{
+  min-height:calc(100vh - 80px);
+  background:#fefdfb;
+}
+.theme-science :is(.slides-page,.prep-page,.library-drawer) .el-button--default:not(.is-text,.is-link){
+  background:#f3f4f6;
+  border-color:#e5e7eb;
+  color:#4b5563;
+}
+.theme-science :is(.slides-page,.prep-page,.library-drawer) .el-button--default:not(.is-text,.is-link):hover{
+  border-color:#10b981;
+  color:#059669;
+}
+@media(max-width:650px){
+  .slides-hero,.prep-hero{height:auto;min-height:210px}
+  .prep-hero h1{font-size:23px}
+  .library-hero-count{margin-top:10px}
+}

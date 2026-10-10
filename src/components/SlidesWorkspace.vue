@@ -189,9 +189,9 @@ function exportOutline() {
   <main class="slides-page">
     <div class="slides-breadcrumb"><button type="button" @click="$emit('back')">工作台首页</button><span>/</span><span>教学筹备</span><span>/</span><strong>科学课件生成</strong></div>
 
-    <section class="slides-hero">
-      <div class="slides-hero-copy"><span class="slides-eyebrow"><el-icon><MagicStick /></el-icon> 教学筹备 · 前端体验版</span><h1>科学课件生成</h1><p>填好备课信息，先用示例模板搭建课件结构；您可以逐页调整，整理成适合自己课堂的大纲。</p><div class="slides-hero-tags"><span>六步探究流程</span><span>逐页编辑</span><span>本地草稿</span></div></div>
-      <div class="slides-hero-art" aria-hidden="true"><div class="art-circle circle-one"/><div class="art-circle circle-two"/><el-icon><Document /></el-icon><span>SCIENCE</span></div>
+    <section class="prep-hero slides-hero">
+      <div class="prep-hero-copy slides-hero-copy"><span class="prep-kicker">教学筹备 · 前端体验版</span><h1>科学课件生成</h1><p>填好备课信息，先用示例模板搭建课件结构；您可以逐页调整，整理成适合自己课堂的大纲。</p></div>
+      <div class="prep-hero-mark" aria-hidden="true"><el-icon><Document /></el-icon></div>
     </section>
 
     <div class="slides-notice"><span class="notice-dot"/><strong>演示模式</strong><span>这里使用固定模板预览结构，不会调用 AI，也不会上传您填写的内容。保存草稿只存放在当前浏览器。</span></div>

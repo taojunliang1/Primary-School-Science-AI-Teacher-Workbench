@@ -8,16 +8,9 @@ import {
 import { gradeOptions, preparationModes } from '../data/teachingPrep'
 
 const props = defineProps({ mode: { type: String, required: true } })
-const emit = defineEmits(['back', 'navigate'])
+const emit = defineEmits(['back'])
 const config = preparationModes[props.mode]
 const icons = { inquiry: Compass, cases: Document, papers: Reading, reflections: Notebook }
-const modeLinks = [
-  { key: 'slides', label: '科学课件生成' },
-  { key: 'inquiry', label: '科学探究设计' },
-  { key: 'cases', label: '教学案例' },
-  { key: 'papers', label: '教研论文' },
-  { key: 'reflections', label: '心得体会' },
-]
 const storageKey = `science-workbench-prep-${props.mode}-v1`
 const workingKey = `${storageKey}-working`
 const todayKey = () => {
@@ -51,6 +44,7 @@ const draft = reactive(working?.data ? normalizedDraft(working.data) : blankDraf
 const selectedId = ref(records.value.some((record) => record.id === working?.selectedId) ? working.selectedId : null)
 const baseline = ref(typeof working?.baseline === 'string' ? working.baseline : JSON.stringify(blankDraft()))
 const query = ref('')
+const activeStep = ref(0)
 const lastSaved = ref(records.value.find((record) => record.id === selectedId.value)?.updatedAt || '')
 const filledSections = computed(() => config.sections.filter((section) => draft[section.key]?.trim()).length)
 const wordCount = computed(() => [draft.title, ...config.sections.map((section) => draft[section.key])].join('').replace(/\s/g, '').length)
@@ -81,6 +75,7 @@ async function startNew() {
   selectedId.value = null
   baseline.value = JSON.stringify(draft)
   lastSaved.value = ''
+  activeStep.value = 0
 }
 
 async function openRecord(record) {
@@ -90,6 +85,7 @@ async function openRecord(record) {
   selectedId.value = record.id
   baseline.value = JSON.stringify(draft)
   lastSaved.value = record.updatedAt || ''
+  activeStep.value = 0
 }
 
 async function useExample(example) {
@@ -98,6 +94,7 @@ async function useExample(example) {
   selectedId.value = null
   baseline.value = JSON.stringify(draft)
   lastSaved.value = ''
+  activeStep.value = 0
   ElMessage.info('已载入演示素材，修改后可保存为自己的记录')
 }
 
@@ -161,7 +158,6 @@ function exportMarkdown() {
 
     <section class="prep-hero"><div class="prep-hero-copy"><span class="prep-kicker">{{ config.kicker }} · 前端体验版</span><h1>{{ config.title }}</h1><p>{{ config.description }}</p></div><div class="prep-hero-mark" aria-hidden="true"><el-icon><component :is="icons[mode]" /></el-icon></div></section>
 
-    <nav class="prep-switcher" aria-label="教学筹备功能"><button v-for="link in modeLinks" :key="link.key" type="button" :class="{ active: link.key === mode }" @click="link.key !== mode && emit('navigate', link.key)">{{ link.label }}</button></nav>
     <div class="prep-notice"><span class="prep-notice-dot"/><span>{{ config.hint }} 本阶段不调用 AI 或后端；未保存的输入会暂存在当前浏览器，正式记录请点击“保存”。</span></div>
 
     <div class="prep-shelf">
@@ -169,15 +165,17 @@ function exportMarkdown() {
       <section class="prep-shelf-card surface-card" aria-label="演示素材"><div class="prep-shelf-heading"><div><span class="prep-overline">STARTER IDEAS</span><h2>{{ mode === 'cases' ? '示例案例' : '写作示例' }}</h2></div><span class="prep-example-badge">仅供参考</span></div><div class="prep-examples"><button v-for="example in config.examples" :key="example.title" type="button" @click="useExample(example)"><span>{{ example.tag }}</span><strong>{{ example.title }}</strong><el-icon><ArrowRight /></el-icon></button></div></section>
     </div>
 
-    <div class="prep-layout">
+    <section class="inquiry-process surface-card" aria-label="六步探究流程"><div class="inquiry-process-head"><div><span class="prep-overline">INQUIRY PATH</span><h2>六步探究流程</h2></div><span>已填写 {{ filledSections }} / 6 步</span></div><div class="inquiry-step-track"><button v-for="(section, index) in config.sections" :key="section.key" type="button" :class="{ active: activeStep === index, complete: draft[section.key]?.trim() }" @click="activeStep = index"><span>{{ draft[section.key]?.trim() && activeStep !== index ? '✓' : String(index + 1).padStart(2, '0') }}</span><strong>{{ section.label }}</strong></button></div></section>
+
+    <div class="prep-layout inquiry-layout">
       <section class="prep-editor-card surface-card" :aria-label="`编辑${config.itemName}`"><div class="prep-card-heading"><span class="prep-step">01</span><div><h2>编辑{{ config.itemName }}</h2><p>{{ selectedId ? `正在编辑已保存记录 · ${lastSaved}` : '创建新内容，填写后点击保存' }}</p></div></div>
         <div class="prep-form-grid"><div v-for="field in config.fields" :key="field.key" class="prep-field" :class="{ wide: field.wide }"><label :for="`${mode}-${field.key}`">{{ field.label }}<i v-if="field.required">*</i></label><el-select v-if="field.type === 'grade'" :id="`${mode}-${field.key}`" v-model="draft[field.key]" :placeholder="field.placeholder" clearable style="width:100%"><el-option v-for="grade in gradeOptions" :key="grade" :label="grade" :value="grade"/></el-select><el-select v-else-if="field.type === 'duration'" :id="`${mode}-${field.key}`" v-model="draft[field.key]" style="width:100%"><el-option v-for="duration in ['35 分钟', '40 分钟', '45 分钟', '80 分钟']" :key="duration" :label="duration" :value="duration"/></el-select><el-date-picker v-else-if="field.type === 'date'" :id="`${mode}-${field.key}`" v-model="draft[field.key]" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:100%"/><el-input v-else :id="`${mode}-${field.key}`" v-model="draft[field.key]" :placeholder="field.placeholder" maxlength="160" clearable/></div></div>
-        <div class="prep-section-heading"><h3>{{ mode === 'inquiry' ? '六步探究流程' : mode === 'papers' ? '论文结构' : mode === 'reflections' ? '课堂反思' : '案例内容' }}</h3><span>已填写 {{ filledSections }} / {{ config.sections.length }}</span></div>
-        <div class="prep-section-fields"><div v-for="(section, index) in config.sections" :key="section.key" class="prep-section-field"><div class="prep-section-label"><span>{{ String(index + 1).padStart(2, '0') }}</span><label :for="`${mode}-${section.key}`">{{ section.label }}</label></div><el-input :id="`${mode}-${section.key}`" v-model="draft[section.key]" type="textarea" :rows="3" maxlength="1500" :placeholder="section.hint"/></div></div>
-        <div class="prep-editor-actions"><el-button type="primary" :icon="EditPen" @click="saveRecord">{{ selectedId ? '保存修改' : `保存${config.itemName}` }}</el-button><el-button :icon="Download" @click="exportMarkdown">导出 Markdown</el-button><span>{{ isDirty ? '修改已临时保留，尚未保存为记录' : selectedId ? '已保存' : '尚未保存为记录' }}</span></div>
+        <div class="prep-section-heading"><h3>当前步骤 · {{ config.sections[activeStep].label }}</h3><span>{{ activeStep + 1 }} / 6</span></div>
+        <div class="inquiry-active-step"><div class="inquiry-active-number">{{ String(activeStep + 1).padStart(2, '0') }}</div><h3>{{ config.sections[activeStep].label }}</h3><p>{{ config.sections[activeStep].hint }}</p><el-input :id="`${mode}-${config.sections[activeStep].key}`" v-model="draft[config.sections[activeStep].key]" type="textarea" :rows="7" maxlength="1500" :placeholder="config.sections[activeStep].hint"/><div class="inquiry-step-actions"><el-button :disabled="activeStep === 0" @click="activeStep--">上一步</el-button><el-button :disabled="activeStep === 5" type="primary" plain @click="activeStep++">下一步</el-button></div></div>
+        <div class="prep-editor-actions"><el-button type="primary" :icon="EditPen" @click="saveRecord">{{ selectedId ? '保存修改' : `保存${config.itemName}` }}</el-button><span>{{ isDirty ? '修改已临时保留，尚未保存为记录' : selectedId ? '已保存' : '尚未保存为记录' }}</span></div>
       </section>
 
-      <section class="prep-preview-card surface-card" :aria-label="config.preview"><div class="prep-card-heading"><span class="prep-step">02</span><div><h2>{{ config.preview }}</h2><p>随左侧输入实时更新</p></div></div><div class="prep-preview-paper"><div class="prep-preview-top"><span>{{ config.kicker }}</span><span>{{ wordCount }} 字</span></div><h3>{{ draft.title.trim() || '在左侧填写标题' }}</h3><div class="prep-preview-meta"><span v-for="field in config.fields.filter((item) => item.key !== 'title' && draft[item.key]?.trim())" :key="field.key">{{ field.label }}：{{ draft[field.key] }}</span></div><div v-if="!filledSections" class="prep-preview-empty"><el-icon><component :is="icons[mode]" /></el-icon><strong>内容预览将在这里出现</strong><p>填写任一部分，右侧会同步排版展示。</p></div><div v-for="(section, index) in config.sections.filter((item) => draft[item.key]?.trim())" :key="section.key" class="prep-preview-section"><h4><span>{{ String(index + 1).padStart(2, '0') }}</span>{{ section.label }}</h4><p>{{ draft[section.key] }}</p></div><div class="prep-preview-footer">小学科学教师工作台 · 本地演示文稿</div></div></section>
+      <section class="prep-preview-card surface-card" :aria-label="config.preview"><div class="prep-card-heading"><span class="prep-step">02</span><div><h2>{{ config.preview }}</h2><p>随左侧输入实时更新</p></div></div><div class="prep-preview-paper"><div class="prep-preview-top"><span>{{ config.kicker }}</span><span>{{ wordCount }} 字</span></div><h3>{{ draft.title.trim() || '在左侧填写标题' }}</h3><div class="prep-preview-meta"><span v-for="field in config.fields.filter((item) => item.key !== 'title' && draft[item.key]?.trim())" :key="field.key">{{ field.label }}：{{ draft[field.key] }}</span></div><div v-if="!filledSections" class="prep-preview-empty"><el-icon><component :is="icons[mode]" /></el-icon><strong>内容预览将在这里出现</strong><p>填写任一部分，右侧会同步排版展示。</p></div><div v-for="(section, index) in config.sections.filter((item) => draft[item.key]?.trim())" :key="section.key" class="prep-preview-section"><h4><span>{{ String(index + 1).padStart(2, '0') }}</span>{{ section.label }}</h4><p>{{ draft[section.key] }}</p></div><div class="prep-preview-footer">小学科学教师工作台 · 本地演示文稿</div></div><el-button class="inquiry-report-button" type="primary" size="large" :icon="Download" @click="exportMarkdown">导出完整探究报告</el-button></section>
     </div>
   </main>
 </template>

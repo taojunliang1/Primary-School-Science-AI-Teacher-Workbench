@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Aim, ArrowDown, ArrowLeft, ArrowRight, Bell, Calendar, ChatDotRound,
@@ -11,6 +11,7 @@ import {
 import { timetableDays, timetableRows } from './data/timetable'
 import SlidesWorkspace from './components/SlidesWorkspace.vue'
 import TeachingPrepWorkspace from './components/TeachingPrepWorkspace.vue'
+const LibraryWorkspace = defineAsyncComponent(() => import('./components/LibraryWorkspace.vue'))
 
 const now = new Date()
 const teacherName = '张老师'
@@ -29,7 +30,128 @@ const selectedDateLabel = computed(() => `${selectedDateObject.value.getMonth() 
 const selectedWeekday = computed(() => weekdays[selectedDateObject.value.getDay()])
 const isToday = computed(() => selectedDate.value === todayKey)
 const todayColumn = now.getDay() - 1
-const todayCourseCount = computed(() => timetableRows.filter((row) => !row.band && row.slots?.[todayColumn]?.isClass).length)
+const timetableStorageKey = 'science-workbench-timetable-v1'
+const cloneTimetable = (rows) => rows.map((row) => ({
+  ...row,
+  slots: row.slots?.map((slot) => ({ ...slot })),
+}))
+const serializeTimetable = (rows) => JSON.stringify(rows.map((row) => row.slots?.map((slot) => (
+  slot.skip ? null : { text: slot.text || '', isClass: !!slot.isClass, important: !!slot.important }
+)) || null))
+
+function loadTimetable() {
+  const rows = cloneTimetable(timetableRows)
+  try {
+    const saved = JSON.parse(localStorage.getItem(timetableStorageKey) || 'null')
+    if (!Array.isArray(saved) || saved.length !== rows.length) return rows
+    rows.forEach((row, rowIndex) => row.slots?.forEach((slot, dayIndex) => {
+      if (slot.skip) return
+      const stored = saved[rowIndex]?.[dayIndex]
+      if (!stored || typeof stored.text !== 'string') return
+      slot.text = stored.text.slice(0, 60)
+      slot.isClass = !!stored.isClass && !!slot.text.trim()
+      slot.important = !!stored.important && slot.isClass
+    }))
+  } catch {
+    // 浏览器中没有可用的课表记录时展示样例课表。
+  }
+  return rows
+}
+
+const scheduleRows = ref(loadTimetable())
+const timetableDraftRows = ref([])
+const editingTimetable = ref(false)
+const timetablePromptOpen = ref(false)
+const visibleTimetableRows = computed(() => editingTimetable.value ? timetableDraftRows.value : scheduleRows.value)
+const hasTimetableEdits = computed(() => editingTimetable.value && serializeTimetable(timetableDraftRows.value) !== serializeTimetable(scheduleRows.value))
+const todayCourseCount = computed(() => scheduleRows.value.filter((row) => !row.band && row.slots?.[todayColumn]?.isClass).length)
+
+function persistTimetable() {
+  try {
+    localStorage.setItem(timetableStorageKey, serializeTimetable(scheduleRows.value))
+    return true
+  } catch {
+    ElMessage.error('浏览器未能保存课表，请检查存储空间或浏览器设置')
+    return false
+  }
+}
+
+function startTimetableEdit() {
+  timetableDraftRows.value = cloneTimetable(scheduleRows.value)
+  editingTimetable.value = true
+}
+
+function updateTimetableSlot(rowIndex, dayIndex, value) {
+  const slot = timetableDraftRows.value[rowIndex]?.slots?.[dayIndex]
+  if (!slot || slot.skip) return
+  const wasEmpty = !slot.text?.trim()
+  slot.text = value.slice(0, 60)
+  if (!slot.text.trim()) {
+    slot.isClass = false
+    slot.important = false
+  } else if (wasEmpty && !slot.type) {
+    slot.isClass = true
+  }
+}
+
+async function saveTimetableEdit() {
+  if (!hasTimetableEdits.value) return
+  try {
+    await ElMessageBox.confirm('保存本周课表的修改？修改将保存在当前浏览器。', '确认保存课表', {
+      confirmButtonText: '保存', cancelButtonText: '继续编辑', type: 'info',
+    })
+  } catch {
+    return
+  }
+  const previous = scheduleRows.value
+  scheduleRows.value = cloneTimetable(timetableDraftRows.value)
+  if (!persistTimetable()) {
+    scheduleRows.value = previous
+    return
+  }
+  editingTimetable.value = false
+  timetableDraftRows.value = []
+  ElMessage.success('课表已保存到当前浏览器')
+}
+
+async function cancelTimetableEdit() {
+  if (hasTimetableEdits.value) {
+    try {
+      await ElMessageBox.confirm('放弃尚未保存的课表修改？', '放弃修改', {
+        confirmButtonText: '放弃修改', cancelButtonText: '继续编辑', type: 'warning',
+      })
+    } catch {
+      return
+    }
+  }
+  editingTimetable.value = false
+  timetableDraftRows.value = []
+}
+
+async function toggleTimetableMark(rowIndex, dayIndex, event) {
+  if (editingTimetable.value) return
+  const row = scheduleRows.value[rowIndex]
+  const slot = row?.slots?.[dayIndex]
+  if (!slot?.text?.trim() || !slot.isClass) return
+  event.preventDefault()
+  if (timetablePromptOpen.value) return
+  const wasMarked = !!slot.important
+  timetablePromptOpen.value = true
+  try {
+    await ElMessageBox.confirm(`是否${wasMarked ? '取消标记' : '标记'} ${timetableDays[dayIndex]} ${row.time} 的“${slot.text}”？`, wasMarked ? '取消课程标记' : '标记课程', {
+      confirmButtonText: wasMarked ? '取消标记' : '确认标记',
+      cancelButtonText: wasMarked ? '保留标记' : '取消',
+      type: wasMarked ? 'warning' : 'info',
+    })
+    slot.important = !wasMarked
+    if (!persistTimetable()) slot.important = wasMarked
+    else ElMessage.success(wasMarked ? '已取消课程标记' : '课程已标记')
+  } catch {
+    // 用户关闭提示框时保留当前标记状态。
+  } finally {
+    timetablePromptOpen.value = false
+  }
+}
 
 const navigation = [
   { label: '工作台首页', icon: HomeFilled, key: 'home' },
@@ -273,7 +395,8 @@ function clearCompleted() {
       </header>
 
       <SlidesWorkspace v-if="activePage === 'slides'" @back="openFeature('home', '工作台首页')" />
-      <TeachingPrepWorkspace v-else-if="prepPages.includes(activePage)" :key="activePage" :mode="activePage" @back="openFeature('home', '工作台首页')" @navigate="(key) => openFeature(key, key)" />
+      <TeachingPrepWorkspace v-else-if="activePage === 'inquiry'" :key="activePage" :mode="activePage" @back="openFeature('home', '工作台首页')" />
+      <LibraryWorkspace v-else-if="['cases', 'papers', 'reflections'].includes(activePage)" :key="activePage" :mode="activePage" @back="openFeature('home', '工作台首页')" />
       <main v-else class="dashboard">
         <section class="welcome-banner" aria-label="今日欢迎">
           <div class="welcome-content"><div class="welcome-eyebrow"><span class="eyebrow-dot" />{{ now.getMonth() + 1 }}月{{ now.getDate() }}日 · 今日科学</div><h1>欢迎{{ teacherName }}，美好的一天从探索开始</h1><p>今天有 <strong>{{ todayCourseCount }} 节科学课</strong>，<strong>{{ todayPendingCount }} 项任务</strong>待办。<span class="ai-tip">让 AI 帮你搞定实验设计</span>，省出时间专注科学思维培养 <span class="banner-star">✦</span></p></div>
@@ -289,19 +412,21 @@ function clearCompleted() {
 
         <div class="content-grid">
           <section class="course-card surface-card" aria-labelledby="course-title">
-            <div class="card-header"><div class="card-title-wrap"><span class="heading-icon rose"><el-icon><Calendar /></el-icon></span><div><span class="overline">WEEKLY TIMETABLE</span><h2 id="course-title">今日课程 · 本周课表</h2></div></div><span class="schedule-week-label">{{ formattedToday }}</span></div>
+            <div class="card-header"><div class="card-title-wrap"><span class="heading-icon rose"><el-icon><Calendar /></el-icon></span><div><span class="overline">WEEKLY TIMETABLE</span><h2 id="course-title">今日课程 · 本周课表</h2></div></div><div class="timetable-header-actions"><span class="schedule-week-label">{{ formattedToday }}</span><el-button v-if="!editingTimetable" size="small" :icon="EditPen" @click="startTimetableEdit">编辑课表</el-button></div></div>
+            <div v-if="editingTimetable" class="timetable-edit-bar"><span>点击课程格修改内容，空白格也可填写；保存后在当前浏览器保留。</span><div><el-button size="small" @click="cancelTimetableEdit">放弃修改</el-button><el-button type="primary" size="small" :icon="Check" :disabled="!hasTimetableEdits" @click="saveTimetableEdit">保存修改</el-button></div></div>
             <div class="timetable-scroll" role="region" aria-label="本周课程表，可横向滚动" tabindex="0">
               <div class="timetable-inner">
               <table class="timetable">
                 <thead><tr><th colspan="2" scope="col">时间</th><th v-for="(day, index) in timetableDays" :key="day" scope="col" :class="{ 'today-column': index === todayColumn }">{{ day }}<span v-if="index === todayColumn" class="day-today-dot" aria-label="今天" /></th></tr></thead>
                 <tbody>
-                  <tr v-for="row in timetableRows" :key="row.time" :class="`row-${row.band || 'regular'}`">
+                  <tr v-for="(row, rowIndex) in visibleTimetableRows" :key="row.time" :class="`row-${row.band || 'regular'}`">
                     <th v-if="row.section" class="section-time" scope="row" :rowspan="row.sectionRowspan || 1">{{ row.section }}</th>
                     <th class="clock-time" scope="row" :colspan="row.section || row.sectionContinue ? 1 : 2">{{ row.time }}</th>
                     <td v-if="row.merged" class="merged-event" colspan="5">{{ row.merged }}</td>
                     <template v-else v-for="(slot, dayIndex) in row.slots" :key="dayIndex">
-                      <td v-if="!slot.skip" :rowspan="slot.rowSpan || 1" :class="['schedule-slot', { 'today-column': dayIndex === todayColumn, 'research-slot': slot.type === 'research' }]">
-                        <span v-if="slot.text" :class="['slot-label', { 'important-lesson': slot.important, 'event-label': slot.isClass === false }]">{{ slot.text }}</span>
+                      <td v-if="!slot.skip" :rowspan="slot.rowSpan || 1" :class="['schedule-slot', { 'today-column': dayIndex === todayColumn, 'research-slot': slot.type === 'research', 'markable-slot': !editingTimetable && slot.isClass && slot.text, 'marked-slot': slot.important }]" :title="!editingTimetable && slot.isClass && slot.text ? (slot.important ? '右键取消标记' : '右键添加标记') : undefined" @contextmenu="toggleTimetableMark(rowIndex, dayIndex, $event)">
+                        <input v-if="editingTimetable" class="slot-editor" type="text" :value="slot.text || ''" maxlength="60" placeholder="＋" :aria-label="`编辑${timetableDays[dayIndex]}${row.time}课程`" @input="updateTimetableSlot(rowIndex, dayIndex, $event.target.value)" />
+                        <span v-else-if="slot.text" :class="['slot-label', { 'important-lesson': slot.important, 'event-label': slot.isClass === false }]">{{ slot.text }}</span>
                       </td>
                     </template>
                   </tr>
@@ -310,7 +435,7 @@ function clearCompleted() {
               <div v-if="todayColumn >= 0 && todayColumn < 5" class="today-column-outline" :style="{ gridColumn: `${todayColumn + 2} / span 1` }" aria-hidden="true" />
               </div>
             </div>
-            <div class="timetable-legend"><span><i class="legend-dot key-lesson" />标记课次</span><span><i class="legend-dot today-day" />今天</span><span class="legend-note">课表为样例数据，暂未接入数据库</span></div>
+            <div class="timetable-legend"><span><i class="legend-dot key-lesson" />已标记课程</span><span><i class="legend-dot today-day" />今天</span><span class="legend-note">右键课程班级添加或取消标记；课表保存在当前浏览器</span></div>
           </section>
 
           <section id="todo-card" class="todo-card surface-card" aria-labelledby="todo-title">

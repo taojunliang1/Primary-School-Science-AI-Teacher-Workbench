@@ -30,6 +30,31 @@
   white-space: nowrap;
 }
 
+.timetable-header-actions,
+.timetable-edit-bar,
+.timetable-edit-bar > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.timetable-header-actions .el-button,
+.timetable-edit-bar .el-button { margin: 0; }
+
+.timetable-edit-bar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 9px 11px;
+  margin: -5px 0 12px;
+  border: 1px solid #e8dce2;
+  border-radius: 8px;
+  background: #fcf8fa;
+  color: #796a73;
+  font-size: 10px;
+}
+
+.timetable-edit-bar > div { margin-left: auto; }
+
 .timetable-scroll {
   max-width: 100%;
   overflow-x: auto;
@@ -120,6 +145,29 @@
   font-size: 10px;
   font-weight: 600;
 }
+
+.timetable .markable-slot { cursor: context-menu; }
+.timetable .markable-slot:hover { background-color: rgba(179, 127, 151, .08); }
+
+.slot-editor {
+  width: 100%;
+  min-width: 0;
+  height: 27px;
+  padding: 3px 4px;
+  border: 1px solid #d9cbd2;
+  border-radius: 5px;
+  outline: none;
+  background: rgba(255, 255, 255, .9);
+  color: #51444b;
+  text-align: center;
+  font-size: 10px;
+}
+
+.slot-editor::placeholder { color: #b6a9b0; }
+.slot-editor:focus {
+  border-color: #a87c90;
+  box-shadow: 0 0 0 2px rgba(168, 124, 144, .14);
+}
 .timetable .schedule-slot.today-column {
   box-shadow: none;
 }
@@ -186,4 +234,5 @@
   .schedule-week-label { display: none; }
   .timetable, .timetable-inner { min-width: 650px; }
   .timetable-legend .legend-note { margin-left: 0; width: 100%; }
+  .timetable-edit-bar > span { width: 100%; }
 }
