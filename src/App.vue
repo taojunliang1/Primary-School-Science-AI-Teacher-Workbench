@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Aim, ArrowDown, ArrowLeft, ArrowRight, Bell, Calendar, ChatDotRound,
@@ -9,6 +9,8 @@ import {
   VideoPlay, View,
 } from '@element-plus/icons-vue'
 import { timetableDays, timetableRows } from './data/timetable'
+import SlidesWorkspace from './components/SlidesWorkspace.vue'
+import TeachingPrepWorkspace from './components/TeachingPrepWorkspace.vue'
 
 const now = new Date()
 const teacherName = '张老师'
@@ -75,6 +77,12 @@ const secondary = [
 ]
 
 const sidebarCollapsed = ref(false)
+const prepPages = ['slides', 'inquiry', 'cases', 'papers', 'reflections']
+const pageFromHash = () => {
+  const key = window.location.hash.slice(1)
+  return prepPages.includes(key) ? key : 'home'
+}
+const activePage = ref(pageFromHash())
 const mobileSidebarOpen = ref(false)
 const mobileSearchOpen = ref(false)
 const searchValue = ref('')
@@ -101,15 +109,31 @@ function openMobileNav() {
 function openFeature(key, label) {
   mobileSidebarOpen.value = false
   if (key === 'home') {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    activePage.value = 'home'
+    window.location.hash = 'home'
+    nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
+    return
+  }
+  if (prepPages.includes(key)) {
+    activePage.value = key
+    window.location.hash = key
+    nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
     return
   }
   if (key === 'todos') {
-    document.getElementById('todo-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    activePage.value = 'home'
+    window.location.hash = 'home'
+    nextTick(() => document.getElementById('todo-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
     return
   }
   ElMessage({ message: `${label}将在后续阶段开放，当前可查看工作台静态预览。`, type: 'info', duration: 2800 })
 }
+
+function syncPageFromHash() {
+  activePage.value = pageFromHash()
+}
+onMounted(() => window.addEventListener('hashchange', syncPageFromHash))
+onUnmounted(() => window.removeEventListener('hashchange', syncPageFromHash))
 
 function submitSearch() {
   const query = searchValue.value.trim().toLowerCase()
@@ -203,12 +227,12 @@ function clearCompleted() {
       <div class="sidebar-scroll">
         <nav aria-label="主导航">
           <template v-for="entry in navigation" :key="entry.group || entry.key">
-            <button v-if="entry.key" class="nav-link selected" type="button" @click="openFeature(entry.key, entry.label)" :title="entry.label">
+            <button v-if="entry.key" class="nav-link" :class="{ selected: activePage === entry.key }" type="button" @click="openFeature(entry.key, entry.label)" :title="entry.label">
               <el-icon><component :is="entry.icon" /></el-icon><span v-if="!sidebarCollapsed">{{ entry.label }}</span>
             </button>
             <div v-else class="nav-group">
               <button v-if="!sidebarCollapsed" class="nav-group-title" type="button" :aria-expanded="expandedGroups[entry.group]" @click="expandedGroups[entry.group] = !expandedGroups[entry.group]">{{ entry.group }}<el-icon :class="{ closed: !expandedGroups[entry.group] }"><ArrowDown /></el-icon></button>
-              <button v-for="item in (sidebarCollapsed || expandedGroups[entry.group] ? entry.items : [])" :key="item.key" class="nav-link" type="button" @click="openFeature(item.key, item.label)" :title="item.label">
+              <button v-for="item in (sidebarCollapsed || expandedGroups[entry.group] ? entry.items : [])" :key="item.key" class="nav-link" :class="{ selected: activePage === item.key }" type="button" @click="openFeature(item.key, item.label)" :title="item.label">
                 <el-icon><component :is="item.icon" /></el-icon><span v-if="!sidebarCollapsed">{{ item.label }}</span>
               </button>
             </div>
@@ -237,8 +261,8 @@ function clearCompleted() {
           <div class="search-box"><el-icon><Search /></el-icon><input v-model="searchValue" placeholder="搜索功能..." aria-label="搜索功能" @keyup.enter="submitSearch" /><kbd>↵</kbd></div>
           <button class="mobile-search icon-button" type="button" aria-label="搜索功能" @click="mobileSearchOpen = true"><el-icon><Search /></el-icon></button>
           <el-popover v-model:visible="taskPopoverOpen" placement="bottom-end" :width="286" trigger="click">
-            <template #reference><button class="task-status" type="button"><span class="task-pulse" /> <span>1 个生成中</span></button></template>
-            <div class="popover-task"><div class="popover-title">AI 任务中心</div><div class="popover-task-row"><div class="task-mini-icon"><el-icon><Document /></el-icon></div><div><strong>《认识浮力》课件大纲</strong><span>模拟任务 · 正在生成中</span></div></div><el-progress :percentage="68" :show-text="false" :stroke-width="5" :color="theme === 'science' ? '#14B8A6' : '#ab778b'" /><p>本阶段仅展示任务状态示例。</p></div>
+            <template #reference><button class="task-status" type="button"><span class="task-pulse idle" /> <span>0 个生成中</span></button></template>
+            <div class="popover-task"><div class="popover-title">AI 任务中心</div><p>当前没有生成任务。AI 课件功能将在后续阶段接入。</p></div>
           </el-popover>
           <el-tooltip content="通知中心将在后续阶段开放" placement="bottom"><button class="icon-button notification-btn" type="button" @click="openFeature('notifications', '通知中心')"><el-icon><Bell /></el-icon><i /></button></el-tooltip>
           <el-dropdown trigger="click">
@@ -248,7 +272,9 @@ function clearCompleted() {
         </div>
       </header>
 
-      <main class="dashboard">
+      <SlidesWorkspace v-if="activePage === 'slides'" @back="openFeature('home', '工作台首页')" />
+      <TeachingPrepWorkspace v-else-if="prepPages.includes(activePage)" :key="activePage" :mode="activePage" @back="openFeature('home', '工作台首页')" @navigate="(key) => openFeature(key, key)" />
+      <main v-else class="dashboard">
         <section class="welcome-banner" aria-label="今日欢迎">
           <div class="welcome-content"><div class="welcome-eyebrow"><span class="eyebrow-dot" />{{ now.getMonth() + 1 }}月{{ now.getDate() }}日 · 今日科学</div><h1>欢迎{{ teacherName }}，美好的一天从探索开始</h1><p>今天有 <strong>{{ todayCourseCount }} 节科学课</strong>，<strong>{{ todayPendingCount }} 项任务</strong>待办。<span class="ai-tip">让 AI 帮你搞定实验设计</span>，省出时间专注科学思维培养 <span class="banner-star">✦</span></p></div>
           <div class="banner-art" aria-hidden="true"><div class="orbit orbit-one"/><div class="orbit orbit-two"/><div class="planet planet-one"/><div class="planet planet-two"/><div class="planet planet-three"/><span class="sparkle sparkle-one">✧</span><span class="sparkle sparkle-two">✦</span><span class="sparkle sparkle-three">✧</span></div>

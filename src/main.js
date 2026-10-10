@@ -6,5 +6,7 @@ import App from './App.vue'
 import './style.css'
 import './timetable.css'
 import './theme-science.css'
+import './slides-workspace.css'
+import './teaching-prep.css'
 
 createApp(App).use(createPinia()).use(ElementPlus).mount('#app')
