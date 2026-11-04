@@ -1,12 +1,13 @@
 <script setup>
-import { computed, nextTick, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft, ArrowRight, Check, CirclePlus, Delete, Document,
   Download, EditPen, MagicStick, RefreshRight,
 } from '@element-plus/icons-vue'
 
-defineEmits(['back'])
+const props = defineProps({ chatImport: { type: Object, default: null } })
+const emit = defineEmits(['back', 'chat-imported'])
 
 const storageKey = 'science-workbench-slides-draft-v1'
 const emptyForm = () => ({
@@ -15,6 +16,7 @@ const emptyForm = () => ({
 })
 const form = reactive(emptyForm())
 const formRef = ref(null)
+const previewCard = ref(null)
 const outline = ref([])
 const selectedIndex = ref(0)
 const savedAt = ref('')
@@ -54,6 +56,24 @@ const hasFormChanges = computed(() => Boolean(outline.value.length && previewSou
 function page(title, content) {
   return { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, content }
 }
+
+watch(() => props.chatImport, async material => {
+  if (!material?.content) return
+  const first = outline.value.length
+  let remaining = material.content
+  while (remaining.length) {
+    const paragraphEnd = remaining.lastIndexOf('\n', 1200)
+    const end = remaining.length > 1200 && paragraphEnd >= 600 ? paragraphEnd : 1200
+    const title = outline.value.length === first ? material.title : material.title.slice(0, 57) + '（续）'
+    outline.value.push(page(title, remaining.slice(0, end).trim()))
+    remaining = remaining.slice(end).trimStart()
+  }
+  selectedIndex.value = first
+  emit('chat-imported')
+  await nextTick()
+  previewCard.value?.scrollIntoView({ block: 'start' })
+  ElMessage.success('已添加到课件大纲，可编辑后保存草稿')
+}, { immediate: true })
 
 function buildOutline() {
   const topic = form.topic.trim()
@@ -211,7 +231,7 @@ function exportOutline() {
         </el-form>
       </section>
 
-      <section class="slides-preview-card surface-card" aria-labelledby="slides-preview-title">
+      <section ref="previewCard" class="slides-preview-card surface-card" aria-labelledby="slides-preview-title">
         <div class="slides-card-heading"><span class="slides-step">02</span><div><h2 id="slides-preview-title">课件结构预览</h2><p>逐页查看标题与内容，直接编辑文字</p></div><el-tag v-if="outline.length" size="small" effect="plain">{{ outline.length }} 页</el-tag></div>
         <div v-if="!outline.length" class="slides-preview-empty"><div class="empty-illustration"><el-icon><Document /></el-icon><span>✦</span></div><h3>从一节科学课开始</h3><p>填写左侧的课程主题、年级和教学目标，点击“预览示例大纲”，即可在这里查看可编辑的课件结构。</p><span>示例模板 · 无 AI 调用</span></div>
         <template v-else>

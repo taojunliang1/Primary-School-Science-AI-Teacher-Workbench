@@ -9,12 +9,14 @@ import {
   VideoPlay, View,
 } from '@element-plus/icons-vue'
 import { timetableDays, timetableRows } from './data/timetable'
+import { useTodos } from './data/useTodos'
 import SlidesWorkspace from './components/SlidesWorkspace.vue'
 import TeachingPrepWorkspace from './components/TeachingPrepWorkspace.vue'
 const LibraryWorkspace = defineAsyncComponent(() => import('./components/LibraryWorkspace.vue'))
+const ChatWorkspace = defineAsyncComponent(() => import('./components/ChatWorkspace.vue'))
 
 const now = new Date()
-const teacherName = '张老师'
+const teacherName = computed(() => todoTeacher.value?.name || '张老师')
 const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
 const pad = (value) => String(value).padStart(2, '0')
 const dateKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
@@ -199,17 +201,16 @@ const secondary = [
 ]
 
 const sidebarCollapsed = ref(false)
-const prepPages = ['slides', 'inquiry', 'cases', 'papers', 'reflections']
+const workbenchPages = ['slides', 'inquiry', 'cases', 'papers', 'reflections', 'chat']
+const slideImport = ref(null)
 const pageFromHash = () => {
   const key = window.location.hash.slice(1)
-  return prepPages.includes(key) ? key : 'home'
+  return workbenchPages.includes(key) ? key : 'home'
 }
 const activePage = ref(pageFromHash())
 const mobileSidebarOpen = ref(false)
 const mobileSearchOpen = ref(false)
 const searchValue = ref('')
-const todoInput = ref('')
-const todoPriority = ref('normal')
 const taskPopoverOpen = ref(false)
 const expandedGroups = ref(Object.fromEntries(navigation.filter((entry) => entry.group).map((entry) => [entry.group, true])))
 const themeKey = 'science-workbench-theme-v1'
@@ -236,7 +237,7 @@ function openFeature(key, label) {
     nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
     return
   }
-  if (prepPages.includes(key)) {
+  if (workbenchPages.includes(key)) {
     activePage.value = key
     window.location.hash = key
     nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
@@ -251,6 +252,11 @@ function openFeature(key, label) {
   ElMessage({ message: `${label}将在后续阶段开放，当前可查看工作台静态预览。`, type: 'info', duration: 2800 })
 }
 
+function insertChatIntoSlides(material) {
+  slideImport.value = material
+  openFeature('slides', '科学课件生成')
+}
+
 function syncPageFromHash() {
   activePage.value = pageFromHash()
 }
@@ -258,35 +264,22 @@ onMounted(() => window.addEventListener('hashchange', syncPageFromHash))
 onUnmounted(() => window.removeEventListener('hashchange', syncPageFromHash))
 
 function submitSearch() {
-  const query = searchValue.value.trim().toLowerCase()
+  const query = searchValue.value.replace(/\s+/g, '').toLowerCase()
   if (!query) return
   const all = navigation.flatMap((entry) => entry.items || [entry])
-  const match = all.find((item) => item.label.toLowerCase().includes(query))
+  const match = all.find((item) => item.label.replace(/\s+/g, '').toLowerCase().includes(query))
   if (match) openFeature(match.key, match.label)
   else ElMessage({ message: '没有找到匹配的功能，请试试“课件”“实验”或“待办”。', type: 'warning' })
   searchValue.value = ''
   mobileSearchOpen.value = false
 }
 
-const storageKey = 'science-workbench-demo-todos-v1'
-const starterTodos = [
-  { id: 1, date: todayKey, content: '完善四年级《蚕》的实验材料清单', priority: 'high', done: false },
-  { id: 2, date: todayKey, content: '批改四（25）班实验观察记录', priority: 'normal', done: false },
-  { id: 3, date: todayKey, content: '整理本周科学探究活动照片', priority: 'low', done: true },
-]
-let savedTodos
-try {
-  savedTodos = JSON.parse(localStorage.getItem(storageKey))
-} catch {
-  savedTodos = null
-}
-const todos = ref(Array.isArray(savedTodos) ? savedTodos : starterTodos)
-watch(todos, (value) => localStorage.setItem(storageKey, JSON.stringify(value)), { deep: true })
-const todayPendingCount = computed(() => todos.value.filter((item) => item.date === todayKey && !item.done).length)
-const visibleTodos = computed(() => todos.value.filter((item) => item.date === selectedDate.value))
-const completedCount = computed(() => visibleTodos.value.filter((item) => item.done).length)
-const pendingCount = computed(() => visibleTodos.value.length - completedCount.value)
-const progress = computed(() => visibleTodos.value.length ? Math.round(completedCount.value / visibleTodos.value.length * 100) : 0)
+const {
+  teacher: todoTeacher, credentials: todoCredentials, signingIn, loginError, listError: todoError, getChatToken,
+  loading: todoLoading, busy: todoBusy, refresh: refreshTodos, login: loginTodos, logout: logoutTodos,
+  todoInput, todoPriority, todayPendingCount, visibleTodos, completedCount, pendingCount, progress,
+  legacyCount, importLegacy, addTodo, editTodo, toggleTodo, removeTodo, completeAll, clearCompleted,
+} = useTodos(selectedDate, todayKey)
 
 function moveDate(offset) {
   const target = parseDate(selectedDate.value)
@@ -294,45 +287,6 @@ function moveDate(offset) {
   selectedDate.value = dateKey(target)
 }
 
-function addTodo() {
-  const content = todoInput.value.trim()
-  if (!content) return ElMessage.warning('请先填写待办内容')
-  todos.value.unshift({ id: Date.now(), date: selectedDate.value, content, priority: todoPriority.value, done: false })
-  todoInput.value = ''
-  todoPriority.value = 'normal'
-  ElMessage.success('已添加到当天待办')
-}
-
-async function editTodo(todo) {
-  try {
-    const { value } = await ElMessageBox.prompt('修改待办内容', '编辑待办', {
-      inputValue: todo.content,
-      inputValidator: (value) => Boolean(value?.trim()) || '待办内容不能为空',
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
-    })
-    todo.content = value.trim()
-    ElMessage.success('已保存')
-  } catch {
-    // 用户取消编辑。
-  }
-}
-
-function removeTodo(id) {
-  todos.value = todos.value.filter((item) => item.id !== id)
-  ElMessage.success('已删除')
-}
-
-function completeAll() {
-  visibleTodos.value.forEach((item) => { item.done = true })
-  ElMessage.success('当天待办已全部完成')
-}
-
-function clearCompleted() {
-  const count = completedCount.value
-  todos.value = todos.value.filter((item) => item.date !== selectedDate.value || !item.done)
-  ElMessage.success(`已清除 ${count} 项已完成待办`)
-}
 </script>
 
 <template>
@@ -394,12 +348,17 @@ function clearCompleted() {
         </div>
       </header>
 
-      <SlidesWorkspace v-if="activePage === 'slides'" @back="openFeature('home', '工作台首页')" />
-      <TeachingPrepWorkspace v-else-if="activePage === 'inquiry'" :key="activePage" :mode="activePage" @back="openFeature('home', '工作台首页')" />
+      <KeepAlive>
+        <ChatWorkspace v-if="activePage === 'chat'" :key="todoTeacher?.id || 'guest'" :teacher-name="teacherName" :account-id="todoTeacher?.id" :get-token="getChatToken" @insert-into-slides="insertChatIntoSlides" />
+      </KeepAlive>
+      <KeepAlive>
+        <SlidesWorkspace v-if="activePage === 'slides'" :chat-import="slideImport" @chat-imported="slideImport = null" @back="openFeature('home', '工作台首页')" />
+      </KeepAlive>
+      <TeachingPrepWorkspace v-if="activePage === 'inquiry'" :key="activePage" :mode="activePage" @back="openFeature('home', '工作台首页')" />
       <LibraryWorkspace v-else-if="['cases', 'papers', 'reflections'].includes(activePage)" :key="activePage" :mode="activePage" @back="openFeature('home', '工作台首页')" />
-      <main v-else class="dashboard">
+      <main v-else-if="activePage === 'home'" class="dashboard">
         <section class="welcome-banner" aria-label="今日欢迎">
-          <div class="welcome-content"><div class="welcome-eyebrow"><span class="eyebrow-dot" />{{ now.getMonth() + 1 }}月{{ now.getDate() }}日 · 今日科学</div><h1>欢迎{{ teacherName }}，美好的一天从探索开始</h1><p>今天有 <strong>{{ todayCourseCount }} 节科学课</strong>，<strong>{{ todayPendingCount }} 项任务</strong>待办。<span class="ai-tip">让 AI 帮你搞定实验设计</span>，省出时间专注科学思维培养 <span class="banner-star">✦</span></p></div>
+          <div class="welcome-content"><div class="welcome-eyebrow"><span class="eyebrow-dot" />{{ now.getMonth() + 1 }}月{{ now.getDate() }}日 · 今日科学</div><h1>欢迎{{ teacherName }}，美好的一天从探索开始</h1><p>今天有 <strong>{{ todayCourseCount }} 节科学课</strong>，<template v-if="todayPendingCount !== null"><strong>{{ todayPendingCount }} 项任务</strong>待办。</template><template v-else>{{ todoTeacher ? "今日待办暂不可用。" : "登录后查看今日待办。" }}</template><span class="ai-tip">让 AI 帮你搞定实验设计</span>，省出时间专注科学思维培养 <span class="banner-star">✦</span></p></div>
           <div class="banner-art" aria-hidden="true"><div class="orbit orbit-one"/><div class="orbit orbit-two"/><div class="planet planet-one"/><div class="planet planet-two"/><div class="planet planet-three"/><span class="sparkle sparkle-one">✧</span><span class="sparkle sparkle-two">✦</span><span class="sparkle sparkle-three">✧</span></div>
         </section>
 
@@ -439,13 +398,45 @@ function clearCompleted() {
           </section>
 
           <section id="todo-card" class="todo-card surface-card" aria-labelledby="todo-title">
-            <div class="card-header"><div class="card-title-wrap"><span class="heading-icon peach"><el-icon><List /></el-icon></span><div><span class="overline">DAILY PLANNER</span><h2 id="todo-title">每日待办</h2></div></div><span class="pending-pill">{{ pendingCount }} 项待办</span></div>
-            <div class="date-switcher"><button type="button" aria-label="前一天" @click="moveDate(-1)"><el-icon><ArrowLeft /></el-icon></button><div><el-icon><Calendar /></el-icon><strong>{{ selectedDateLabel }}</strong><span>{{ selectedWeekday }}</span><span v-if="isToday" class="today-marker">今天</span></div><button type="button" aria-label="后一天" @click="moveDate(1)"><el-icon><ArrowRight /></el-icon></button></div>
-            <div class="todo-stats"><span>共 <strong>{{ visibleTodos.length }}</strong> 项 · 已完成 <strong>{{ completedCount }}</strong> · 未完成 <strong>{{ pendingCount }}</strong></span><span><strong>{{ progress }}%</strong></span></div><el-progress :percentage="progress" :show-text="false" :stroke-width="5" :color="theme === 'science' ? '#10B981' : '#a87b89'" />
-            <div class="todo-list" v-if="visibleTodos.length"><div v-for="todo in visibleTodos" :key="todo.id" class="todo-row" :class="{ done: todo.done }"><el-checkbox v-model="todo.done" :aria-label="`完成${todo.content}`" /><span class="todo-text" @dblclick="editTodo(todo)">{{ todo.content }}</span><el-tag v-if="todo.priority !== 'normal'" :type="todo.priority === 'high' ? 'danger' : 'info'" size="small" effect="plain" round>{{ todo.priority === 'high' ? '重要' : '低' }}</el-tag><el-dropdown trigger="click"><button class="todo-more" type="button" aria-label="更多待办操作"><el-icon><MoreFilled /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item :icon="EditPen" @click="editTodo(todo)">编辑</el-dropdown-item><el-dropdown-item :icon="Delete" @click="removeTodo(todo.id)">删除</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div></div>
-            <div class="todo-empty" v-else><span><el-icon><CircleCheck /></el-icon></span><strong>今天还没有待办</strong><p>添加一项计划，让每一步都更从容。</p></div>
-            <div class="todo-form"><el-input v-model="todoInput" placeholder="添加新的待办事项...（按 Enter 快速添加）" maxlength="80" @keyup.enter="addTodo" /><div class="todo-form-bottom"><div class="priority-picker"><span>优先级</span><el-select v-model="todoPriority" size="small" style="width: 92px"><el-option label="普通" value="normal"><span class="priority-option"><i class="priority-dot normal" />普通</span></el-option><el-option label="重要" value="high"><span class="priority-option"><i class="priority-dot high" />重要</span></el-option><el-option label="低" value="low"><span class="priority-option"><i class="priority-dot low" />低</span></el-option></el-select></div><el-button type="primary" :icon="Plus" @click="addTodo">添加</el-button></div></div>
-            <div class="todo-actions"><button type="button" :disabled="!pendingCount" @click="completeAll"><el-icon><Check /></el-icon>全部完成</button><button type="button" :disabled="!completedCount" @click="clearCompleted"><el-icon><Delete /></el-icon>清除已完成</button></div>
+            <div class="card-header">
+              <div class="card-title-wrap"><span class="heading-icon peach"><el-icon><List /></el-icon></span><div><span class="overline">DAILY PLANNER</span><h2 id="todo-title">每日待办</h2></div></div>
+              <div v-if="todoTeacher" class="todo-account"><span class="pending-pill" v-if="!todoLoading && !todoError">{{ pendingCount }} 项待办</span><el-button text size="small" :disabled="todoBusy" @click="logoutTodos">退出</el-button></div>
+            </div>
+            <form v-if="!todoTeacher" class="todo-sign-in" @submit.prevent="loginTodos">
+              <strong>登录教师账号</strong>
+              <p>登录后可在不同设备上查看和更新待办。</p>
+              <label>用户名<el-input v-model="todoCredentials.username" name="username" autocomplete="username" maxlength="64" aria-label="用户名" required /></label>
+              <label>密码<el-input v-model="todoCredentials.password" name="password" autocomplete="current-password" type="password" maxlength="128" aria-label="密码" required /></label>
+              <p v-if="loginError" class="todo-api-error" role="alert">{{ loginError }}</p>
+              <el-button native-type="submit" type="primary" :loading="signingIn">登录</el-button>
+            </form>
+            <template v-else>
+              <div v-if="legacyCount" class="todo-import"><span>本浏览器有 {{ legacyCount }} 项旧待办</span><el-button size="small" :disabled="todoBusy" @click="importLegacy">导入旧待办</el-button></div>
+              <div class="date-switcher"><button type="button" aria-label="前一天" @click="moveDate(-1)"><el-icon><ArrowLeft /></el-icon></button><div><el-icon><Calendar /></el-icon><strong>{{ selectedDateLabel }}</strong><span>{{ selectedWeekday }}</span><span v-if="isToday" class="today-marker">今天</span></div><button type="button" aria-label="后一天" @click="moveDate(1)"><el-icon><ArrowRight /></el-icon></button></div>
+              <div v-if="todoLoading" class="todo-empty" role="status"><p>正在读取待办…</p></div>
+              <div v-else-if="todoError" class="todo-empty" role="alert"><p>{{ todoError }}</p><el-button size="small" @click="refreshTodos">重试</el-button></div>
+              <template v-else>
+                <div class="todo-stats"><span>共 <strong>{{ visibleTodos.length }}</strong> 项 · 已完成 <strong>{{ completedCount }}</strong> · 未完成 <strong>{{ pendingCount }}</strong></span><span><strong>{{ progress }}%</strong></span></div>
+                <el-progress :percentage="progress" :show-text="false" :stroke-width="5" :color="theme === 'science' ? '#10B981' : '#a87b89'" />
+                <div class="todo-list" v-if="visibleTodos.length">
+                  <div v-for="todo in visibleTodos" :key="todo.id" class="todo-row" :class="{ done: todo.done }">
+                    <el-checkbox :model-value="todo.done" :disabled="todoBusy" :aria-label="'完成' + todo.content" @change="toggleTodo(todo, $event)" />
+                    <span class="todo-text" @dblclick="editTodo(todo)">{{ todo.content }}</span>
+                    <el-tag v-if="todo.priority !== 'normal'" :type="todo.priority === 'high' ? 'danger' : 'info'" size="small" effect="plain" round>{{ todo.priority === 'high' ? '重要' : '低' }}</el-tag>
+                    <el-dropdown trigger="click" :disabled="todoBusy">
+                      <button class="todo-more" type="button" :disabled="todoBusy" :aria-label="'管理待办：' + todo.content"><el-icon><MoreFilled /></el-icon></button>
+                      <template #dropdown><el-dropdown-menu><el-dropdown-item :icon="EditPen" @click="editTodo(todo)">编辑</el-dropdown-item><el-dropdown-item :icon="Delete" @click="removeTodo(todo.id)">删除</el-dropdown-item></el-dropdown-menu></template>
+                    </el-dropdown>
+                  </div>
+                </div>
+                <div class="todo-empty" v-else><span><el-icon><CircleCheck /></el-icon></span><strong>这一天还没有待办</strong><p>添加一项计划，让每一步都更从容。</p></div>
+              </template>
+              <div class="todo-form">
+                <el-input v-model="todoInput" placeholder="添加新的待办事项...（按 Enter 快速添加）" aria-label="待办内容" maxlength="80" @keyup.enter="addTodo" />
+                <div class="todo-form-bottom"><div class="priority-picker"><span>优先级</span><el-select v-model="todoPriority" size="small" aria-label="优先级" style="width: 92px"><el-option label="普通" value="normal"><span class="priority-option"><i class="priority-dot normal" />普通</span></el-option><el-option label="重要" value="high"><span class="priority-option"><i class="priority-dot high" />重要</span></el-option><el-option label="低" value="low"><span class="priority-option"><i class="priority-dot low" />低</span></el-option></el-select></div><el-button type="primary" :disabled="todoBusy || todoLoading" :icon="Plus" @click="addTodo">添加</el-button></div>
+              </div>
+              <div class="todo-actions"><button type="button" :disabled="todoBusy || todoLoading || !!todoError || !pendingCount" @click="completeAll"><el-icon><Check /></el-icon>全部完成</button><button type="button" :disabled="todoBusy || todoLoading || !!todoError || !completedCount" @click="clearCompleted"><el-icon><Delete /></el-icon>清除已完成</button></div>
+            </template>
           </section>
         </div>
 
@@ -456,3 +447,12 @@ function clearCompleted() {
     <el-dialog v-model="mobileSearchOpen" title="搜索功能" width="min(90vw, 420px)"><el-input v-model="searchValue" placeholder="输入课件、实验、待办等关键词" clearable @keyup.enter="submitSearch"><template #prefix><el-icon><Search /></el-icon></template></el-input><template #footer><el-button @click="mobileSearchOpen = false">取消</el-button><el-button type="primary" @click="submitSearch">搜索</el-button></template></el-dialog>
   </div>
 </template>
+
+<style scoped>
+.todo-account, .todo-import { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.todo-import { justify-content: space-between; margin-bottom: 10px; font-size: 12px; color: #52645c; }
+.todo-sign-in { display: grid; gap: 11px; align-content: start; margin: 14px auto; width: min(100%, 300px); }
+.todo-sign-in p { margin: 0; color: #627269; font-size: 12px; }
+.todo-sign-in label { display: grid; gap: 4px; font-size: 12px; }
+.todo-sign-in .todo-api-error { color: #aa302f; }
+</style>

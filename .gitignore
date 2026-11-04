@@ -8,3 +8,8 @@ dist/
 *.log
 coverage/
 Thumbs.db
+/.venv/
+/.runtime/
+__pycache__/
+.pytest_cache/
+*.sqlite3
