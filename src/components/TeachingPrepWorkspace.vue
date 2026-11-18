@@ -8,7 +8,7 @@ import {
 import { gradeOptions, preparationModes } from '../data/teachingPrep'
 
 const props = defineProps({ mode: { type: String, required: true } })
-const emit = defineEmits(['back'])
+const emit = defineEmits(['back', 'ai-prep'])
 const config = preparationModes[props.mode]
 const icons = { inquiry: Compass, cases: Document, papers: Reading, reflections: Notebook }
 const storageKey = `science-workbench-prep-${props.mode}-v1`
@@ -49,6 +49,16 @@ const lastSaved = ref(records.value.find((record) => record.id === selectedId.va
 const filledSections = computed(() => config.sections.filter((section) => draft[section.key]?.trim()).length)
 const wordCount = computed(() => [draft.title, ...config.sections.map((section) => draft[section.key])].join('').replace(/\s/g, '').length)
 const isDirty = computed(() => JSON.stringify(draft) !== baseline.value)
+function sendInquiryToPrep() {
+  const steps = config.sections
+    .filter(section => draft[section.key]?.trim())
+    .map(section => section.label + '：' + draft[section.key].trim())
+  emit('ai-prep', {
+    title: draft.title, grade: draft.grade, duration: Number.parseInt(draft.duration, 10),
+    objectives: steps.join('\n'),
+    materials: [draft.materials, draft.safety && '安全与组织提醒：' + draft.safety].filter(Boolean).join('\n'),
+  })
+}
 const filteredRecords = computed(() => {
   const needle = query.value.trim().toLowerCase()
   return records.value.filter((record) => !needle || `${record.data.title} ${record.data.topic || ''} ${record.data.keywords || ''}`.toLowerCase().includes(needle))
@@ -158,7 +168,7 @@ function exportMarkdown() {
 
     <section class="prep-hero"><div class="prep-hero-copy"><span class="prep-kicker">{{ config.kicker }} · 前端体验版</span><h1>{{ config.title }}</h1><p>{{ config.description }}</p></div><div class="prep-hero-mark" aria-hidden="true"><el-icon><component :is="icons[mode]" /></el-icon></div></section>
 
-    <div class="prep-notice"><span class="prep-notice-dot"/><span>{{ config.hint }} 本阶段不调用 AI 或后端；未保存的输入会暂存在当前浏览器，正式记录请点击“保存”。</span></div>
+    <div class="prep-notice"><span class="prep-notice-dot"/><span>{{ config.hint }} 输入暂存在当前浏览器，正式记录请点击“保存”。</span><el-button v-if="mode === 'inquiry'" type="primary" plain size="small" :disabled="!draft.title.trim()" @click="sendInquiryToPrep">按此方案备课</el-button></div>
 
     <div class="prep-shelf">
       <section class="prep-shelf-card surface-card" :aria-label="config.collection"><div class="prep-shelf-heading"><div><span class="prep-overline">MY WORK</span><h2>{{ config.collection }} <small>{{ records.length }}</small></h2></div><el-button type="primary" :icon="Plus" size="small" @click="startNew">新建</el-button></div><el-input v-model="query" :prefix-icon="Search" clearable :placeholder="`搜索${config.itemName}标题`" aria-label="搜索已保存的记录"/><div v-if="filteredRecords.length" class="prep-record-list"><div v-for="record in filteredRecords" :key="record.id" class="prep-record" :class="{ active: selectedId === record.id }"><button type="button" @click="openRecord(record)"><strong>{{ record.data.title }}</strong><span>{{ record.updatedAt }}</span></button><el-button text :icon="Delete" :aria-label="`删除${record.data.title}`" @click="deleteRecord(record)"/></div></div><div v-else class="prep-shelf-empty">{{ records.length ? '没有找到匹配的记录' : '还没有保存记录。可从空白页开始，也可载入右侧示例。' }}</div></section>

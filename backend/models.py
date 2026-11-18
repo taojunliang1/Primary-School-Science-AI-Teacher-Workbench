@@ -1,6 +1,7 @@
 from datetime import date as CalendarDate, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, MetaData, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, MetaData, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.mysql import VARCHAR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -52,6 +53,40 @@ class Course(Record, TeacherOwned, Base):
     class_name: Mapped[str] = mapped_column(String(80))
     course_name: Mapped[str] = mapped_column(String(120))
     status: Mapped[str] = mapped_column(String(20), default="scheduled")
+    course_type: Mapped[str | None] = mapped_column(String(12))
+    important: Mapped[bool | None] = mapped_column(Boolean)
+
+
+class LessonUnit(Record, TeacherOwned, Base):
+    __tablename__ = "lesson_units"
+    __table_args__ = (
+        UniqueConstraint("user_id", "grade", "semester", "title", name="uq_lesson_units_identity"),
+    )
+    grade: Mapped[str] = mapped_column(String(24))
+    semester: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(80))
+    duration: Mapped[int] = mapped_column(Integer)
+    objectives: Mapped[str] = mapped_column(Text)
+    materials: Mapped[str] = mapped_column(Text)
+
+
+class PrepSlotLink(Record, TeacherOwned, Base):
+    __tablename__ = "prep_slot_links"
+    __table_args__ = (UniqueConstraint("user_id", "slot_key", name="uq_prep_slot_links_slot"),)
+
+    slot_key: Mapped[str] = mapped_column(String(260).with_variant(VARCHAR(260, charset="ascii", collation="ascii_bin"), "mysql"))
+    lesson_id: Mapped[int] = mapped_column(ForeignKey("lesson_units.id", ondelete="CASCADE"), index=True)
+
+
+class CoursewareProject(Record, Base):
+    __tablename__ = "courseware_projects"
+    __table_args__ = (UniqueConstraint("lesson_id", name="uq_courseware_projects_lesson"),)
+
+    lesson_id: Mapped[int] = mapped_column(ForeignKey("lesson_units.id", ondelete="CASCADE"))
+    slides_json: Mapped[dict] = mapped_column(JSON)
+    artifact_id: Mapped[str] = mapped_column(String(32))
+    slide_count: Mapped[int] = mapped_column(Integer)
+    revision: Mapped[int] = mapped_column(Integer)
 
 
 class AIGeneration(Record, TeacherOwned, Base):

@@ -7,7 +7,7 @@ import {
 } from '@element-plus/icons-vue'
 
 const props = defineProps({ chatImport: { type: Object, default: null } })
-const emit = defineEmits(['back', 'chat-imported'])
+const emit = defineEmits(['back', 'chat-imported', 'ai-prep'])
 
 const storageKey = 'science-workbench-slides-draft-v1'
 const emptyForm = () => ({
@@ -214,7 +214,7 @@ function exportOutline() {
       <div class="prep-hero-mark" aria-hidden="true"><el-icon><Document /></el-icon></div>
     </section>
 
-    <div class="slides-notice"><span class="notice-dot"/><strong>演示模式</strong><span>这里使用固定模板预览结构，不会调用 AI，也不会上传您填写的内容。保存草稿只存放在当前浏览器。</span></div>
+    <div class="slides-notice"><span class="notice-dot"/><strong>本地大纲</strong><span>这里使用固定模板预览结构，草稿存放在当前浏览器。</span><el-button type="primary" plain size="small" @click="emit('ai-prep', { title: form.topic, grade: form.grade, duration: form.duration, objectives: [form.objectives, form.focus].filter(Boolean).join('\n'), materials: form.materials })">带入 AI 备课中心</el-button></div>
 
     <div class="slides-layout">
       <section class="slides-form-card surface-card" aria-labelledby="slides-form-title">

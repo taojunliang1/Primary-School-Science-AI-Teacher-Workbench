@@ -6,8 +6,9 @@ import katex from 'katex'
 import 'katex/dist/contrib/mhchem'
 import 'katex/dist/katex.min.css'
 import DOMPurify from 'dompurify'
+import { artifactReferencePattern } from '../data/chatApi'
 
-const props = defineProps({ text: { type: String, required: true } })
+const props = defineProps({ text: { type: String, required: true }, fileIds: { type: Array, default: () => [] } })
 const markdown = new MarkdownIt({ html: false, breaks: true }).use(texmath, {
   engine: katex,
   delimiters: ['dollars', 'brackets'],
@@ -20,6 +21,29 @@ const safe = html => DOMPurify.sanitize(html, { ADD_TAGS: ['eq', 'eqn', 'eqno'] 
 const blocks = computed(() => {
   const env = {}
   const tokens = markdown.parse(props.text, env)
+  if (props.fileIds.length) {
+    const fileIds = new Set(props.fileIds)
+    for (const { children } of tokens) {
+      let fileLink = false
+      for (const token of children || []) {
+        if (token.type === 'link_open') {
+          const target = token.attrGet('href') || ''
+          fileLink = /^(sandbox:|file:)/i.test(target)
+            || Array.from(target.matchAll(artifactReferencePattern)).some(match => fileIds.has(match[1]))
+          if (fileLink) {
+            token.tag = 'span'
+            token.attrs = null
+          }
+        } else if (fileLink && token.type === 'link_close') {
+          token.tag = 'span'
+          fileLink = false
+        } else if (token.type === 'text' || token.type === 'code_inline') {
+          token.content = token.content.replace(artifactReferencePattern,
+            (match, id) => fileIds.has(id) ? '见下方文件卡片' : match)
+        }
+      }
+    }
+  }
   const result = []
   let start = 0
   const addHtml = end => {

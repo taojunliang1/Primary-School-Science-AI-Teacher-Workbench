@@ -10,6 +10,8 @@ coverage/
 Thumbs.db
 /.venv/
 /.runtime/
+/backend/artifacts/
+/backend/media/
 __pycache__/
 .pytest_cache/
 *.sqlite3

@@ -1,14 +1,15 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, toRaw } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Camera, ChatDotRound, Close, Connection, CopyDocument, DataAnalysis, Delete, EditPen,
   Files, Menu, MoreFilled, Paperclip, Plus, Position, Reading, RefreshRight, Search, Sunny,
 } from '@element-plus/icons-vue'
 import ChatAttachment from './ChatAttachment.vue'
+import ChatArtifact from './ChatArtifact.vue'
 import ChatMarkdown from './ChatMarkdown.vue'
 import { chatPrompts } from '../data/chatPrompts'
-import { requestChatReply } from '../data/chatApi'
+import { artifactReferencePattern, fetchChatSkills, lookupChatArtifacts, requestChatReply } from '../data/chatApi'
 import { apiMessage } from '../data/todoApi'
 import { loadChatState, saveChatState } from '../data/chatStorage'
 import '../chat-workspace.css'
@@ -16,10 +17,11 @@ import '../chat-workspace.css'
 const props = defineProps({
   teacherName: { type: String, required: true },
   accountId: Number,
+  promptRequest: Object,
   getToken: { type: Function, required: true },
 })
-const emit = defineEmits(['insert-into-slides'])
-const promptIcons = { Reading, Sunny, Connection, DataAnalysis }
+const emit = defineEmits(['insert-into-slides', 'prompt-consumed'])
+const promptIcons = { Reading, Sunny, Connection, DataAnalysis, Files }
 const models = [{ id: 'science', name: 'DeepSeek Flash' }, { id: 'general', name: 'DeepSeek V4 Pro' }]
 const imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const fileExtensions = /\.(?:jpe?g|png|webp|gif|pdf|docx|txt|csv|xlsx)$/i
@@ -32,6 +34,7 @@ const query = ref('')
 const mobileHistoryOpen = ref(false)
 const loading = ref(true)
 const storageProblem = ref(false)
+const skillStatus = ref({ ready: false, checked: false })
 const drafts = reactive({})
 const jobs = reactive(new Map())
 const messageScroll = ref(null)
@@ -43,7 +46,45 @@ let scrollFrame
 const active = computed(() => sessions.value.find(session => session.id === activeId.value))
 const draft = computed(() => drafts[activeId.value])
 const pending = computed(() => jobs.get(activeId.value))
-const canSend = computed(() => !!props.accountId && !pending.value && Boolean(draft.value?.text.trim()))
+const recoveredFiles = reactive(new Map())
+const fileReferences = computed(() => (active.value?.messages || [])
+  .filter(message => message.role === 'assistant')
+  .map(message => ({
+    messageId: message.id,
+    files: message.artifacts || [],
+    ids: Array.from((message.text || '').matchAll(artifactReferencePattern), match => match[1]),
+  })))
+const filesByMessage = computed(() => new Map(fileReferences.value.map(({ messageId, files, ids }) => {
+  const unique = new Map(files.map(file => [file.id, file]))
+  for (const id of ids) {
+    if (!unique.has(id) && recoveredFiles.get(id)) unique.set(id, recoveredFiles.get(id))
+  }
+  return [messageId, [...unique.values()]]
+})))
+const referenceKey = computed(() => [...new Set(fileReferences.value.flatMap(({ ids, files }) =>
+  ids.filter(id => !files.some(file => file.id === id))
+))].join(','))
+watch(referenceKey, async (key, _previous, onCleanup) => {
+  const token = props.getToken()
+  const ids = key.split(',').filter(id => id && !recoveredFiles.has(id))
+  if (!token || !ids.length) return
+  const controller = new AbortController()
+  onCleanup(() => controller.abort())
+  try {
+    for (let offset = 0; offset < ids.length; offset += 32) {
+      const batch = ids.slice(offset, offset + 32)
+      const files = await lookupChatArtifacts({ ids: batch, token, signal: controller.signal })
+      if (controller.signal.aborted) return
+      const found = new Map(files.map(file => [file.id, file]))
+      for (const id of batch) recoveredFiles.set(id, found.get(id) || null)
+    }
+  } catch {
+    // The saved file cards still work if historical lookups are unavailable.
+  }
+})
+const canSend = computed(() => !!props.accountId && !pending.value && (
+  Boolean(draft.value?.text.trim()) || draft.value?.attachments.some(item => item.image)
+))
 
 const historyGroups = computed(() => {
   const today = new Date()
@@ -107,6 +148,15 @@ function newSession() {
   selectSession(session.id)
 }
 
+watch([() => props.promptRequest, loading], ([request, restoring]) => {
+  if (!request || restoring) return
+  if (active.value?.messages.length || draft.value?.text || draft.value?.attachments.length) newSession()
+  active.value.model = request.model
+  draft.value.text = request.text
+  emit('prompt-consumed')
+  nextTick(() => composer.value?.focus())
+}, { immediate: true })
+
 onMounted(async () => {
   try {
     const saved = await loadChatState(storageScope)
@@ -120,7 +170,22 @@ onMounted(async () => {
   loading.value = false
   persist()
   void scrollToEnd()
+  void loadSkillStatus()
 })
+
+async function loadSkillStatus() {
+  const token = props.accountId && props.getToken()
+  if (!token) return
+  try {
+    const data = await fetchChatSkills({ token })
+    skillStatus.value = {
+      ready: Boolean(data.pptMasterReady),
+      checked: true,
+    }
+  } catch {
+    skillStatus.value = { ready: false, checked: true }
+  }
+}
 onBeforeUnmount(() => {
   cancelAnimationFrame(scrollFrame)
   jobs.forEach(job => job.controller.abort())
@@ -201,12 +266,31 @@ async function generate(session, target) {
   const lastQuestion = history.findLastIndex(message => message.role === 'user' && message.text.trim())
   if (lastQuestion < 0) return ElMessage.warning('请先输入文字问题')
   const messages = history.slice(0, lastQuestion + 1)
-  jobs.set(session.id, { controller, targetId: target?.id })
+  if (model !== 'science' && messages.at(-1).attachments?.some(item => item.image && item.file)) {
+    return ElMessage.warning('请切换到 DeepSeek Flash 识别图片')
+  }
+  const job = reactive({ controller, targetId: target?.id, text: '', status: '正在等待 DeepSeek 回复', toolTrace: [] })
+  jobs.set(session.id, job)
   if (activeId.value === session.id && !target) void scrollToEnd()
   try {
-    const result = await requestChatReply({ messages, model, token, signal: controller.signal })
+    const result = await requestChatReply({
+      messages, model, token, signal: controller.signal, webSearch: !!session.webSearch,
+      onEvent(event) {
+        if (event.type === 'delta') job.text += event.text
+        if (event.type === 'tool_phase') job.text = ''
+        if (event.type === 'tool_start') job.status = event.label
+        if (event.type === 'tool_result') {
+          job.toolTrace.push(event.tool)
+          job.status = '正在整理结果'
+        }
+        if (activeId.value === session.id && !target) void scrollToEnd()
+      },
+    })
     if (controller.signal.aborted) return
-    const reply = { id: target?.id || id(), role: 'assistant', text: result.text, providerModel: result.model, model, attempt, attachments: [] }
+    const reply = {
+      id: target?.id || id(), role: 'assistant', text: result.text, providerModel: result.model,
+      model, attempt, attachments: [], toolTrace: result.tool_trace || [], artifacts: result.artifacts || [],
+    }
     if (target) {
       const index = session.messages.findIndex(message => message.id === target.id)
       if (index >= 0) session.messages.splice(index, 1, reply)
@@ -214,7 +298,7 @@ async function generate(session, target) {
     session.updatedAt = Date.now()
     persist()
   } catch (error) {
-    if (!controller.signal.aborted) ElMessage.error(apiMessage(error))
+    if (!controller.signal.aborted) ElMessage.error(error instanceof TypeError ? apiMessage(error) : error.message)
   } finally {
     jobs.delete(session.id)
     if (activeId.value === session.id && !target) void scrollToEnd()
@@ -225,8 +309,10 @@ function send() {
   const session = active.value
   if (!props.accountId) return ElMessage.warning('请先在工作台首页登录教师账号')
   if (!session || !canSend.value) return
-  const text = draft.value.text.trim()
   const attachments = draft.value.attachments
+  const hasImage = attachments.some(item => item.image)
+  if (hasImage && session.model !== 'science') return ElMessage.warning('请切换到 DeepSeek Flash 识别图片')
+  const text = draft.value.text.trim() || '请分析我附上的图片。'
   if (!session.messages.length && !session.customTitle) session.title = Array.from(text.replace(/\s+/g, ' ') || attachments[0]?.name || defaultTitle).slice(0, 28).join('')
   session.messages.push({ id: id(), role: 'user', text, attachments })
   session.updatedAt = Date.now()
@@ -310,7 +396,7 @@ function insertIntoSlides(message) {
           <span>科学助手</span>
           <h1 :title="active?.title">{{ active?.title || defaultTitle }}</h1>
         </div>
-        <span class="chat-demo-badge">DeepSeek</span>
+        <span class="chat-demo-badge">DeepSeek · 技能</span>
         <div v-if="active" class="chat-header-actions">
           <el-select v-model="active.model" class="chat-model" aria-label="选择 DeepSeek 模型" :disabled="!!pending" @change="persist">
             <el-option v-for="model in models" :key="model.id" :label="model.name" :value="model.id" />
@@ -347,9 +433,17 @@ function insertIntoSlides(message) {
             <div class="chat-message-content">
               <div v-if="message.role === 'assistant'" class="chat-message-label">科学助手 <span>· {{ message.providerModel || '本地示例' }}</span></div>
               <div class="chat-bubble">
-                <ChatMarkdown v-if="message.role === 'assistant'" :text="message.text" />
+                <ChatMarkdown v-if="message.role === 'assistant'" :text="message.text" :file-ids="filesByMessage.get(message.id)?.map(file => file.id)" />
                 <p v-else-if="message.text" class="chat-user-text">{{ message.text }}</p>
                 <div v-if="message.attachments.length" class="chat-attachments"><ChatAttachment v-for="attachment in message.attachments" :key="attachment.id" :attachment="attachment" /></div>
+              </div>
+              <div v-if="message.role === 'assistant' && message.toolTrace?.length" class="chat-tool-trace" aria-label="技能调用记录">
+                <span v-for="(trace, index) in message.toolTrace" :key="index" class="chat-tool-chip" :class="'is-' + (trace.status || 'ok')">
+                  <el-icon><Connection /></el-icon>{{ trace.summary || trace.name }}
+                </span>
+              </div>
+              <div v-if="filesByMessage.get(message.id)?.length" class="chat-artifacts">
+                <ChatArtifact v-for="artifact in filesByMessage.get(message.id)" :key="artifact.id" :artifact="artifact" :get-token="getToken" />
               </div>
               <div v-if="message.role === 'assistant'" class="chat-message-actions">
                 <button type="button" class="chat-mini-action" @click="copyMessage(message.text)"><el-icon><CopyDocument /></el-icon>复制</button>
@@ -359,12 +453,23 @@ function insertIntoSlides(message) {
               <div v-else-if="message === active.messages.at(-1) && message.text && !pending && props.accountId" class="chat-message-actions">
                 <button type="button" class="chat-mini-action" @click="generate(active)"><el-icon><RefreshRight /></el-icon>重试回复</button>
               </div>
-              <p v-if="pending?.targetId === message.id" class="chat-retry-status" role="status">正在重新生成…</p>
+              <template v-if="pending?.targetId === message.id">
+                <p class="chat-retry-status" role="status">{{ pending.status }}</p>
+                <p v-if="pending.text" class="chat-user-text">{{ pending.text }}</p>
+              </template>
             </div>
           </article>
-          <div v-if="pending && !pending.targetId" class="chat-message is-assistant" role="status">
+          <div v-if="pending && !pending.targetId" class="chat-message is-assistant">
             <span class="chat-message-avatar chat-ai-avatar" aria-hidden="true"><el-icon><Connection /></el-icon></span>
-            <div class="chat-thinking"><span class="chat-dots" aria-hidden="true"><i /><i /><i /></span>正在等待 DeepSeek 回复</div>
+            <div class="chat-message-content">
+              <div v-if="pending.text" class="chat-bubble"><p class="chat-user-text">{{ pending.text }}</p></div>
+              <div v-else class="chat-thinking" role="status"><span class="chat-dots" aria-hidden="true"><i /><i /><i /></span>{{ pending.status }}</div>
+              <div v-if="pending.toolTrace.length" class="chat-tool-trace" aria-label="技能调用进度">
+                <span v-for="(trace, index) in pending.toolTrace" :key="index" class="chat-tool-chip" :class="'is-' + trace.status">
+                  <el-icon><Connection /></el-icon>{{ trace.summary }}
+                </span>
+              </div>
+            </div>
           </div>
         </section>
       </el-scrollbar>
@@ -378,6 +483,11 @@ function insertIntoSlides(message) {
               <button type="button" class="chat-tool"><span class="chat-slash" aria-hidden="true">/</span><span>快捷指令</span></button>
               <template #dropdown><el-dropdown-menu><el-dropdown-item v-for="prompt in chatPrompts" :key="prompt.id" :command="prompt.text">{{ prompt.title }}</el-dropdown-item></el-dropdown-menu></template>
             </el-dropdown>
+            <el-checkbox v-if="active" v-model="active.webSearch" :disabled="!!pending" @change="persist">联网搜索</el-checkbox>
+            <span class="chat-skill-status" :class="{ 'is-ready': skillStatus.ready }">
+              <el-icon><Connection /></el-icon>
+              {{ skillStatus.ready ? '课件导出可用' : (skillStatus.checked ? '课件服务暂不可用' : '正在检查课件服务…') }}
+            </span>
             <input ref="fileInput" class="chat-file-input" type="file" :accept="accept" multiple @change="addFiles" />
             <input ref="cameraInput" class="chat-file-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" capture="environment" @change="addFiles" />
           </div>
@@ -395,7 +505,7 @@ function insertIntoSlides(message) {
             <el-button v-else class="chat-send" type="primary" :icon="Position" :disabled="!canSend" @click="send">发送</el-button>
           </div>
         </div>
-        <p class="chat-disclaimer">对话文字会发送给 DeepSeek，附件仅在本地预览。请核实 AI 生成的教学内容。</p>
+        <p class="chat-disclaimer">对话文字和本条消息的图片会发送给 DeepSeek。Flash 支持读图，其他附件仅在本地预览。联网搜索按 DeepSeek 用量计费。</p>
       </footer>
     </el-container>
   </el-container>

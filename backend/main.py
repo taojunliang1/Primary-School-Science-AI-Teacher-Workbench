@@ -1,12 +1,15 @@
+import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import date as CalendarDate, datetime, timedelta, timezone
+from pathlib import Path as FilePath
 from typing import Annotated
 
 import jwt
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Response
+from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pwdlib import PasswordHash
@@ -14,16 +17,27 @@ from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from .chat import ChatReply, ChatRequest, complete_chat
+from .artifacts import ArtifactNotFound, artifact_path, artifact_root
+from .artifact_preview import preview_slide
+from .chat import ChatReply, ChatRequest, chat_events, complete_chat
 from .config import ROOT, Settings
 from .database import make_engine
 from .models import Todo, User
+from .prep import build_prep_router
+from .prep_materials import build_material_router
 from .schemas import LegacyImport, Login, LoginResult, TodoCreate, TodoUpdate, TodoView, UserView
+from .skill_registry import SkillRegistry
+from .skill_runtime.media import MediaService
+from .skill_runtime.ppt_master import PptMasterService
+from .weekly_schedule import build_schedule_router
 
 password_hash = PasswordHash.recommended()
 log = logging.getLogger(__name__)
 ISSUER = "science-workbench"
 AUDIENCE = "science-workbench-api"
+DOWNLOAD_AUDIENCE = "science-workbench-artifact"
+DOWNLOAD_COOKIE = "chat_artifact_download"
+DOWNLOAD_LIFETIME = 120
 
 
 def create_app(settings: Settings | None = None):
@@ -40,6 +54,10 @@ def create_app(settings: Settings | None = None):
     app = FastAPI(title="小学科学 AI 教师工作台 API", version="0.1.0", lifespan=lifespan)
     api = APIRouter(prefix="/api/v1")
     bearer = HTTPBearer(auto_error=False)
+    skill_registry = SkillRegistry(ROOT / "backend" / "skills")
+    media_dir = FilePath(os.getenv("SKILL_MEDIA_DIR", str(ROOT / "backend" / "media")))
+    media = MediaService(media_dir)
+    ppt_master = PptMasterService(artifact_dir=artifact_root(), media=media)
 
     def get_db():
         with sessions() as session:
@@ -103,9 +121,117 @@ def create_app(settings: Settings | None = None):
     def me(user: Teacher):
         return user
 
+    @api.get("/chat/skills")
+    def chat_skills(_user: Teacher):
+        return {
+            "skills": [
+                {"name": skill.name, "description": skill.description}
+                for skill in skill_registry.all()
+            ],
+            "pptMasterReady": True,
+        }
+
     @api.post("/chat/completions", response_model=ChatReply)
-    async def chat(payload: ChatRequest, _user: Teacher):
-        return await complete_chat(payload, settings.deepseek_api_key)
+    async def chat(payload: ChatRequest, user: Teacher):
+        return await complete_chat(payload, settings.deepseek_api_key, skill_registry,
+                                   ppt_master, media, user.id)
+
+    @api.post("/chat/stream")
+    def stream_chat(payload: ChatRequest, user: Teacher, db: DB):
+        user_id = user.id
+        db.close()
+        if not settings.deepseek_api_key:
+            raise HTTPException(503, "DeepSeek 尚未配置，请在后端设置 API 密钥")
+
+        async def events():
+            try:
+                async for event in chat_events(payload, settings.deepseek_api_key, skill_registry,
+                                               ppt_master, media, user_id):
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
+            except HTTPException as exc:
+                yield json.dumps({"type": "error", "message": exc.detail}, ensure_ascii=False) + "\n"
+
+        return StreamingResponse(events(), media_type="application/x-ndjson", headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        })
+
+    def find_artifact(user_id, artifact_id):
+        try:
+            return artifact_path(user_id, artifact_id)
+        except ArtifactNotFound:
+            raise HTTPException(404, "文件已不存在，请从对话中重新生成")
+
+    @api.post("/chat/artifacts/lookup")
+    def lookup_artifacts(ids: Annotated[list[str], Body(max_length=32)], user: Teacher, response: Response):
+        response.headers["Cache-Control"] = "private, no-store"
+        files = []
+        for artifact_id in dict.fromkeys(ids):
+            try:
+                path, meta = artifact_path(user.id, artifact_id)
+            except ArtifactNotFound:
+                continue
+            files.append({
+                "id": artifact_id,
+                "filename": meta.get("filename") or path.name,
+                "slideCount": meta.get("slides"),
+            })
+        return files
+
+    @api.post("/chat/artifacts/{artifact_id}/download")
+    def authorize_artifact_download(artifact_id: str, request: Request, response: Response, user: Teacher):
+        find_artifact(user.id, artifact_id)
+        url = request.url.path.removesuffix("/download")
+        now = datetime.now(timezone.utc)
+        ticket = jwt.encode({
+            "sub": str(user.id), "artifact": artifact_id, "iat": now,
+            "exp": now + timedelta(seconds=DOWNLOAD_LIFETIME),
+            "iss": ISSUER, "aud": DOWNLOAD_AUDIENCE,
+        }, settings.jwt_secret, algorithm="HS256")
+        response.set_cookie(DOWNLOAD_COOKIE, ticket, max_age=DOWNLOAD_LIFETIME,
+                            path=url, httponly=True, samesite="strict", secure=request.url.scheme == "https")
+        response.headers["Cache-Control"] = "private, no-store"
+        return {"url": url}
+
+    @api.get("/chat/artifacts/{artifact_id}/preview")
+    def chat_artifact_preview(artifact_id: str, user: Teacher, slide: Annotated[int, Query(ge=1, le=24)] = 1):
+        path, _ = find_artifact(user.id, artifact_id)
+        try:
+            svg, count = preview_slide(path, slide)
+        except IndexError as exc:
+            raise HTTPException(404, "找不到这张幻灯片") from exc
+        except ValueError as exc:
+            raise HTTPException(422, "暂时无法预览，可直接下载 PowerPoint 文件") from exc
+        return Response(svg, media_type="image/svg+xml", headers={
+            "Cache-Control": "private, no-store",
+            "Content-Security-Policy": "default-src 'none'; img-src data:; sandbox",
+            "X-Content-Type-Options": "nosniff",
+            "X-Slide-Count": str(count),
+        })
+
+    @api.get("/chat/artifacts/{artifact_id}")
+    def chat_artifact(artifact_id: str, request: Request, db: DB,
+                      credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]):
+        if credentials:
+            user_id = current_user(db, credentials).id
+        else:
+            try:
+                claims = jwt.decode(
+                    request.cookies.get(DOWNLOAD_COOKIE, ""), settings.jwt_secret, algorithms=["HS256"],
+                    issuer=ISSUER, audience=DOWNLOAD_AUDIENCE, options={"require": ["exp", "sub", "artifact"]},
+                )
+                if claims["artifact"] != artifact_id:
+                    raise ValueError
+                user_id = int(claims["sub"])
+            except (jwt.InvalidTokenError, ValueError, TypeError):
+                raise unauthorized("下载链接已过期，请在文件卡片上重新点击下载")
+        path, meta = find_artifact(user_id, artifact_id)
+        return FileResponse(
+            path,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            filename=meta.get("filename") or path.name,
+            headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+        )
 
     def owned_todo(todo_id: int, user: User, db: Session):
         todo = db.scalar(select(Todo).where(Todo.id == todo_id, Todo.user_id == user.id))
@@ -171,6 +297,9 @@ def create_app(settings: Settings | None = None):
         db.commit()
         return Response(status_code=204)
 
+    api.include_router(build_prep_router(get_db, current_user, ppt_master, settings.deepseek_api_key))
+    api.include_router(build_schedule_router(get_db, current_user))
+    api.include_router(build_material_router(current_user, settings.deepseek_api_key))
     app.include_router(api)
     if settings.serve_frontend and (ROOT / "dist" / "index.html").is_file():
         app.mount("/", StaticFiles(directory=ROOT / "dist", html=True), name="frontend")

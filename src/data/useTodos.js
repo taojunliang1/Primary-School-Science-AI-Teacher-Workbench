@@ -25,11 +25,12 @@ function readLegacy() {
 
 export function useTodos(selectedDate, today) {
   const teacher = ref(null)
-  const credentials = reactive({ username: '', password: '' })
+  const credentials = reactive({ username: 'teacher', password: '' })
   const loginError = ref('')
   const listError = ref('')
   const loading = ref(false)
   const signingIn = ref(false)
+  const restoringSession = ref(true)
   const busy = ref(false)
   const records = ref({})
   const todoInput = ref('')
@@ -41,7 +42,7 @@ export function useTodos(selectedDate, today) {
   let requestId = 0
 
   const visibleTodos = computed(() => records.value[selectedDate.value] || [])
-  const todayPendingCount = computed(() => records.value[today]?.filter(item => !item.done).length ?? null)
+  const todayPendingCount = computed(() => records.value[today.value]?.filter(item => !item.done).length ?? null)
   const completedCount = computed(() => visibleTodos.value.filter(item => item.done).length)
   const pendingCount = computed(() => visibleTodos.value.length - completedCount.value)
   const progress = computed(() => visibleTodos.value.length ? Math.round(completedCount.value / visibleTodos.value.length * 100) : 0)
@@ -51,6 +52,8 @@ export function useTodos(selectedDate, today) {
     token = ''
     teacher.value = null
     records.value = {}
+    credentials.password = ''
+    loginError.value = ''
     listError.value = ''
     loading.value = false
     todoInput.value = ''
@@ -75,7 +78,7 @@ export function useTodos(selectedDate, today) {
     if (!teacher.value) return
     const current = ++requestId
     const requestToken = token
-    const dates = [...new Set([selectedDate.value, today])]
+    const dates = [...new Set([selectedDate.value, today.value])]
     loading.value = true
     listError.value = ''
     try {
@@ -90,15 +93,14 @@ export function useTodos(selectedDate, today) {
 
   onMounted(async () => {
     try { token = sessionStorage.getItem(tokenKey) || '' } catch { /* browser storage unavailable */ }
-    if (!token) return
-    signingIn.value = true
-    try { adoptAccount(await todoApi.me(token)) }
-    catch (error) {
+    try {
+      if (token) adoptAccount(await todoApi.me(token))
+    } catch (error) {
       if (!sessionExpired(error, token)) loginError.value = apiMessage(error)
-    } finally { signingIn.value = false }
+    } finally { restoringSession.value = false }
   })
 
-  watch([selectedDate, teacher], refresh)
+  watch([selectedDate, today, teacher], refresh)
 
   async function login() {
     if (signingIn.value || !credentials.username.trim() || !credentials.password) return
@@ -174,7 +176,7 @@ export function useTodos(selectedDate, today) {
 
   return {
     getChatToken: () => token,
-    teacher, credentials, signingIn, loginError, listError, loading, busy, refresh, login, logout,
+    teacher, credentials, restoringSession, signingIn, loginError, listError, loading, busy, refresh, login, logout,
     todoInput, todoPriority, todayPendingCount, visibleTodos, completedCount, pendingCount, progress,
     legacyCount: computed(() => importAcknowledged.value ? 0 : legacy.length), importLegacy,
     addTodo, editTodo,

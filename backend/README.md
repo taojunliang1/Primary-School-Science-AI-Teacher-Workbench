@@ -28,11 +28,25 @@ python -m venv .venv
 | `GET /todos/{id}`、`PATCH /todos/{id}`、`DELETE /todos/{id}` | 读取、修改、删除单条待办 |
 | `POST /todos/complete?date=...`、`DELETE /todos/completed?date=...` | 批量完成、清除指定日期已完成待办 |
 | `POST /todos/import` | 导入浏览器旧待办，保留浏览器原记录 |
-| `POST /chat/completions` | 登录后向 DeepSeek 发送文本对话 |
+| `GET /chat/skills` | 查看当前账号可用的本机技能和 ppt-master 是否就绪 |
+| `POST /chat/stream` | 实时接收回复、工具进度及下载信息 |
+| `POST /chat/completions` | 一次性返回完整回复和工具结果 |
+| `GET /chat/artifacts/{id}` | 下载当前账号由技能生成的 PPTX |
 
 迁移同时建立课表、班级、学生、AI 任务、实验报告和科创作品的基础表。这些模块的业务接口后续按需接入。
 
-在项目根目录的本地 `.env` 设置 `DEEPSEEK_API_KEY`，重启 FastAPI。在首页登录后进入「AI 对话」发送文字，即可使用 DeepSeek。会话历史保存在浏览器，请求发送近期的文字上下文，附件仅在本地预览。密钥由后端读取，FastAPI 需要能直接通过 HTTPS 访问 `api.deepseek.com`。
+在项目根目录的本地 `.env` 设置 `DEEPSEEK_API_KEY`，重启 FastAPI。在首页登录后进入「AI 对话」发送文字，即可使用 DeepSeek。会话历史保存在浏览器，请求发送近期文字和本轮选中的图片。Flash 支持图片分析，其他附件保存在本地预览。密钥由后端读取，FastAPI 需要能直接通过 HTTPS 访问 `api.deepseek.com`。
+
+### 技能调用与 ppt-master
+
+FastAPI 直接连接 DeepSeek，并调用项目内置工具。运行网站只需项目的 Python 环境和原有后端配置。
+
+- `search_images` 从 Bing 图片搜索获取配图和来源提示。
+- `draw_image` 默认绘制本地示意图。可在 `.env` 配置 `IMAGE_API_KEY`、`IMAGE_API_BASE` 和 `IMAGE_MODEL`，使用兼容的图片生成服务。
+- 明确要求生成课件时，后端用所选 DeepSeek 模型逐页策划、编写结构化内容和审稿，检查页数、板书密度、图解标注和教师备注后才导出可编辑的 16:9 PPTX。支持可编辑原理图、过程、对照、实验、重点数值和课堂迁移等版式。开启「联网搜索」后，观察页可以查找公开配图；找图失败时保留观察文字并在回复中说明。
+- `search_web` 仅在聊天界面勾选「联网搜索」时可用。成功请求按 DeepSeek 搜索用量计费。
+
+PPTX 和配图分别默认保存到 `backend/artifacts/<教师ID>/` 与 `backend/media/<教师ID>/`。可用 `SKILL_ARTIFACT_DIR` 和 `SKILL_MEDIA_DIR` 自定义存放目录。
 
 运行接口测试：
 
